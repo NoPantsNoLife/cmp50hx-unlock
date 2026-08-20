@@ -20,6 +20,30 @@ patch 02 is 1 file/1 hunk, patch 03 is 1 file/4 hunks, and patch 04 is 1
 file/3 hunks. The old monolithic patch and this ordered series produce the same
 eight changed source files.
 
+## Fresh performance results
+
+| Path | Result |
+|---|---:|
+| RM issue-rate and core-count gate | `PASS_CMP50HX_ISSUE_RATE_AND_COUNTS` |
+| DP4A | `2782.422981` G thread-instructions/s |
+| DP2A pair | `4435.776603` G thread-instructions/s |
+| FFMA | `2584.518335` G thread-instructions/s |
+| FMUL + FADD | `4404.996610` G thread-instructions/s |
+| FP16 Tensor WMMA | `106.819293 TFLOPS`, correct |
+| OpenCL FP64 | `0.419 TFLOPS` |
+| OpenCL FP32 | `13.501 TFLOPS` |
+| OpenCL FP16 | `26.872 TFLOPS` |
+| OpenCL INT64 | `3.479 TIOPS` |
+| OpenCL INT32 | `13.055 TIOPS` |
+| OpenCL INT16 | `11.398 TIOPS` |
+| OpenCL INT8 | `48.272 TIOPS` |
+| OpenCL coalesced read/write | `504.98 / 474.54 GB/s` |
+| OpenCL misaligned read/write | `419.44 / 124.30 GB/s` |
+| OpenCL PCIe send/receive | `1.70 / 1.70 GB/s` |
+| OpenCL PCIe bidirectional | `1.69 GB/s` |
+| Pinned CUDA PCIe H2D/D2H | `1.701960 / 1.708828 GB/s`, correct |
+
+
 ## Evidence rules
 
 The guide uses these labels:
