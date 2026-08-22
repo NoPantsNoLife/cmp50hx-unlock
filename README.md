@@ -20,6 +20,44 @@ patch 02 is 1 file/1 hunk, patch 03 is 1 file/4 hunks, and patch 04 is 1
 file/3 hunks. The old monolithic patch and this ordered series produce the same
 eight changed source files.
 
+## Quick install (Ubuntu/Debian)
+
+On a fresh Ubuntu or Debian system with a CMP 50HX (`10de:1e09`) installed:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xrip/cmp50hx-unlock/master/install.sh | sudo bash
+```
+
+The installer adds the build tools, installs the NVIDIA `610.43.03` userland
+from the official `.run` package, builds the patched modules for the running
+kernel, installs them with a backup, and runs `depmod`. It never rebuilds the
+initramfs and never unloads a loaded driver. It ends with a best-effort live
+check of the card.
+
+When the card works (the verifier prints
+`PASS_CMP50HX_ISSUE_RATE_AND_COUNTS`), make the change persistent across
+boots:
+
+```bash
+sudo /opt/cmp50hx-unlock/install-initramfs.sh
+sudo reboot
+```
+
+Rollback: `sudo /opt/cmp50hx-unlock/install-initramfs.sh --rollback` restores
+the previous initramfs; module backups are under
+`/opt/cmp50hx-unlock/backups/`.
+
+Notes:
+
+- Secure Boot must be disabled, or the unsigned module will not load (the
+  installer warns).
+- Tested subsystem boards are `10de:1554` and `1462:371f`; other `10de:1e09`
+  boards only get a warning.
+- The build downloads the NVIDIA source archive and the `.run` package into
+  `/opt/cmp50hx-unlock/cache`; re-runs reuse them.
+- Real RT execution stays impossible; this unlocks full SM/Tensor speed, the
+  16 GiB BAR1, and PCIe Gen2 (see [`docs/CMP50HX.md`](docs/CMP50HX.md)).
+
 ## Fresh performance results
 
 | Path | Result |
