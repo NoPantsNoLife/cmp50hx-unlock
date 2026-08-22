@@ -18,8 +18,8 @@ set -Eeuo pipefail
 readonly driver_version="610.43.03"
 readonly repo_tarball="https://github.com/xrip/cmp50hx-unlock/archive/refs/heads/master.tar.gz"
 readonly nvidia_run_url="https://us.download.nvidia.com/XFree86/Linux-x86_64/${driver_version}/NVIDIA-Linux-x86_64-${driver_version}.run"
-# SHA-256 of the .run package above. Fill it in when you have it; empty = warn.
-readonly nvidia_run_sha256=""
+# SHA-256 of the .run package above, pinned from the official download.
+readonly nvidia_run_sha256="45e2d4c134a23c35e50f253a4aa63e7e5e8d17e3d185d4a07c8a58e9612ed392"
 readonly install_dir="/opt/cmp50hx-unlock"
 readonly krel="$(uname -r)"
 
@@ -31,9 +31,9 @@ trap 'die "install failed at line ${LINENO}; see output above"' ERR
 [[ -r /etc/os-release ]] || die "cannot read /etc/os-release"
 # shellcheck disable=SC1091
 . /etc/os-release
-case "${ID:-}" in
-    ubuntu|debian) ;;
-    *) die "only Ubuntu/Debian are supported (this system is ${ID:-unknown})" ;;
+case " ${ID:-} ${ID_LIKE:-} " in
+    *" ubuntu "*|*" debian "*|*" linuxmint "*) ;;
+    *) die "only Ubuntu/Debian and their derivatives are supported (this system is ${ID:-unknown})" ;;
 esac
 
 # --- 1. system checks -------------------------------------------------------
@@ -120,7 +120,8 @@ else
 fi
 
 log "installing NVIDIA userland (the kernel module comes from this repo, not the .run)"
-sh "${run_file}" --silent --no-kernel-module --no-dkms --skip-initramfs --no-backup
+sh "${run_file}" --silent --no-kernel-modules --no-dkms --no-backup \
+    --no-rebuild-initramfs --no-x-check --no-nouveau-check --skip-module-unload
 
 if ! find /lib/firmware/nvidia -name 'gsp*.bin' -print -quit 2>/dev/null | grep -q .; then
     log "GSP firmware not present; extracting it from the .run package"
@@ -161,6 +162,7 @@ for mod in nvidia nvidia-uvm nvidia-modeset nvidia-drm nvidia-peermem; do
 done
 [[ -d "${backup_dir}" ]] || log "no previous modules to back up (fresh system)"
 
+mkdir -p "/lib/modules/${krel}/updates"
 for mod in nvidia nvidia-uvm nvidia-modeset nvidia-drm nvidia-peermem; do
     src="${artifact_dir}/${mod}.ko"
     [[ -f "${src}" ]] || continue

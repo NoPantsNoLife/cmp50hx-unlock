@@ -55,6 +55,7 @@ Notes:
   installer warns).
 - Tested subsystem boards are `10de:1554` and `1462:371f`; other `10de:1e09`
   boards only get a warning.
+- Ubuntu, Debian, and their derivatives work; Linux Mint is tested.
 - The build downloads the NVIDIA source archive and the `.run` package into
   `/opt/cmp50hx-unlock/cache`; re-runs reuse them.
 - Real RT execution stays impossible; this unlocks full SM/Tensor speed, the
