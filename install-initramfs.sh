@@ -97,7 +97,8 @@ cat <<EOF
 
 PASS_CMP50HX_INITRAMFS
 Reboot now. After reboot, verify with:
-  /opt/cmp50hx-unlock/artifacts/610.43.03-${krel}/rm-issue-rate 0
+  /opt/cmp50hx-unlock/artifacts/610.43.03-${krel}/rm-issue-rate 0 > /tmp/cmp50-probe.json
+  python3 /opt/cmp50hx-unlock/verify/verify.py /tmp/cmp50-probe.json
 Rollback:
   sudo $0 --rollback
 EOF

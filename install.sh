@@ -72,7 +72,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 log "installing build tools and kernel headers"
 apt-get update -y
-apt-get install -y build-essential curl patch xz-utils kmod binutils ca-certificates mokutil lsb-release
+apt-get install -y build-essential curl patch xz-utils kmod binutils ca-certificates mokutil lsb-release python3
 apt-get install -y "linux-headers-${krel}" \
     || die "no linux-headers package for kernel ${krel}; install the matching headers first"
 
@@ -196,10 +196,12 @@ fi
 if ! lsmod | grep -q '^nvidia ' && modprobe nvidia 2>/dev/null; then
     log "loaded nvidia; running the verifier"
     command -v nvidia-modprobe >/dev/null 2>&1 && nvidia-modprobe -c 0 -u || true
-    if timeout 180 "${artifact_dir}/rm-issue-rate" 0; then
+    probe_json="${install_dir}/logs/rm-probe-${ts}.json"
+    if timeout 180 "${artifact_dir}/rm-issue-rate" 0 >"${probe_json}" \
+            && python3 "${install_dir}/verify/verify.py" "${probe_json}"; then
         live_check="PASS_CMP50HX_ISSUE_RATE_AND_COUNTS"
     else
-        live_check="FAILED (see output above; a first warm load can fail, reboot usually fixes it)"
+        live_check="FAILED (probe kept at ${probe_json}; a warm load after a driver swap can fail, reboot usually fixes it)"
     fi
 fi
 
