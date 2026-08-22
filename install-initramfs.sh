@@ -97,7 +97,7 @@ cat <<EOF
 
 PASS_CMP50HX_INITRAMFS
 Reboot now. After reboot, verify with:
-  /opt/cmp50hx-unlock/artifacts/610.43.03-${krel}/rm-issue-rate
+  /opt/cmp50hx-unlock/artifacts/610.43.03-${krel}/rm-issue-rate 0
 Rollback:
   sudo $0 --rollback
 EOF

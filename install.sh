@@ -196,7 +196,7 @@ fi
 if ! lsmod | grep -q '^nvidia ' && modprobe nvidia 2>/dev/null; then
     log "loaded nvidia; running the verifier"
     command -v nvidia-modprobe >/dev/null 2>&1 && nvidia-modprobe -c 0 -u || true
-    if timeout 180 "${artifact_dir}/rm-issue-rate"; then
+    if timeout 180 "${artifact_dir}/rm-issue-rate" 0; then
         live_check="PASS_CMP50HX_ISSUE_RATE_AND_COUNTS"
     else
         live_check="FAILED (see output above; a first warm load can fail, reboot usually fixes it)"
