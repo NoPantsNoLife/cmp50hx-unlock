@@ -57,7 +57,7 @@ The guide uses these labels:
   and produces the same changed source files as the old monolithic patch.
 
 The IDA database is
-[`gsp_tu10x_610.43.03.elf.i64`](../../../decompil/gsp_tu10x_610.43.03.elf.i64),
+[`gsp_tu10x_610.43.03.elf.i64`](decompil/gsp_tu10x_610.43.03.elf.i64),
 binary SHA-256
 `c10c2866e360154e822087957bc4269168e44f8d45922110e67fd751355806f9`.
 It is the GSP firmware, not the Linux host driver. Therefore it can prove the
@@ -70,7 +70,7 @@ not primary proof.
 SHA-256 is
 `9df87d753cd9c05aa0eedc462af9b35debb549a657136e863282f94c96ee2640`. The
 builder repeats the source hash check and applies the four files in the order
-shown in [`build.sh`](../build.sh).
+shown in [`build.sh`](build.sh).
 
 ## 1. `01-cmp50-stockflow.patch`
 
