@@ -150,15 +150,20 @@ fi
 # --- 6. install the modules -------------------------------------------------
 
 backup_dir="${install_dir}/backups/modules-${ts}"
+dest_dir="/lib/modules/${krel}/updates"
 for mod in nvidia nvidia-uvm nvidia-modeset nvidia-drm nvidia-peermem; do
     path="$(modinfo -n "${mod}" 2>/dev/null || true)"
     [[ -n "${path}" && -f "${path}" ]] || continue
-    case "${path}" in
-        */updates/*) continue ;;
-    esac
+    [[ "${path}" == "${dest_dir}/${mod}.ko" ]] && continue
     mkdir -p "${backup_dir}$(dirname "${path}")"
-    cp -a "${path}" "${backup_dir}${path}"
-    log "backed up ${path}"
+    case "${path}" in
+        "${dest_dir}"/*)
+            mv "${path}" "${backup_dir}${path}"
+            log "moved ${path} aside (inside updates/, it would shadow the new module)" ;;
+        *)
+            cp -a "${path}" "${backup_dir}${path}"
+            log "backed up ${path}" ;;
+    esac
 done
 [[ -d "${backup_dir}" ]] || log "no previous modules to back up (fresh system)"
 
