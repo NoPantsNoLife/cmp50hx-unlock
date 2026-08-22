@@ -5,11 +5,11 @@
 границы доказательств. Серия предназначена для официального исходного кода
 открытого модуля NVIDIA `610.43.03` и проверенной PCI-идентичности CMP50HX:
 
-| Поле | Упакованное значение RM | Значение Linux PCI |
+| Field | Packed RM value | Linux PCI value |
 | --- | ---: | ---: |
-| устройство | `0x1E0910DE` | vendor `10de`, device `1e09` |
-| плата NVIDIA | `0x155410DE` | `10de:1554` |
-| плата MSI | `0x371F1462` | `1462:371f` |
+| device | `0x1E0910DE` | vendor `10de`, device `1e09` |
+| NVIDIA board | `0x155410DE` | `10de:1554` |
+| MSI board | `0x371F1462` | `1462:371f` |
 
 Упакованные значения используются кодом RM/GSP. Модуль Linux использует
 разделённые поля vendor, device и subsystem. При создании нового патча эти
@@ -61,14 +61,14 @@ sudo reboot
 
 ## Новые результаты производительности
 
-| Путь | Результат |
+| Path | Result |
 |---|---:|
-| Проверка issue-rate и количества ядер RM | `PASS_CMP50HX_ISSUE_RATE_AND_COUNTS` |
+| RM issue-rate and core-count gate | `PASS_CMP50HX_ISSUE_RATE_AND_COUNTS` |
 | DP4A | `2782.422981` G thread-instructions/s |
-| Пара DP2A | `4435.776603` G thread-instructions/s |
+| DP2A pair | `4435.776603` G thread-instructions/s |
 | FFMA | `2584.518335` G thread-instructions/s |
 | FMUL + FADD | `4404.996610` G thread-instructions/s |
-| FP16 Tensor WMMA | `106.819293 TFLOPS`, корректно |
+| FP16 Tensor WMMA | `106.819293 TFLOPS`, correct |
 | OpenCL FP64 | `0.419 TFLOPS` |
 | OpenCL FP32 | `13.501 TFLOPS` |
 | OpenCL FP16 | `26.872 TFLOPS` |
@@ -76,11 +76,11 @@ sudo reboot
 | OpenCL INT32 | `13.055 TIOPS` |
 | OpenCL INT16 | `11.398 TIOPS` |
 | OpenCL INT8 | `48.272 TIOPS` |
-| OpenCL последовательное чтение/запись | `504.98 / 474.54 GB/s` |
-| OpenCL невыровненное чтение/запись | `419.44 / 124.30 GB/s` |
-| OpenCL отправка/получение по PCIe | `1.70 / 1.70 GB/s` |
-| OpenCL двунаправленный PCIe | `1.69 GB/s` |
-| Закреплённая CUDA PCIe H2D/D2H | `1.701960 / 1.708828 GB/s`, корректно |
+| OpenCL coalesced read/write | `504.98 / 474.54 GB/s` |
+| OpenCL misaligned read/write | `419.44 / 124.30 GB/s` |
+| OpenCL PCIe send/receive | `1.70 / 1.70 GB/s` |
+| OpenCL PCIe bidirectional | `1.69 GB/s` |
+| Pinned CUDA PCIe H2D/D2H | `1.701960 / 1.708828 GB/s`, correct |
 
 ## Правила доказательств
 
@@ -122,13 +122,13 @@ Booter. Полезный результат — обычное состояни�
 
 ### Файлы и роли
 
-| Файл | Роль |
+| File | Role |
 | --- | --- |
-| `generated/g_kernel_gsp_nvoc.h` | Хранит закрытую копию штатной подписи и её размер. |
-| `kernel/gpu/gsp/kernel_gsp.c` | Проверка CMP50, выделение/замена подписи, восстановление штатной подписи и журналы состояния загрузки. |
-| `arch/turing/kernel_gsp_booter_tu102.c` | Проверки Falcon/SEC2, штатный запуск Booter, чтение WPR/FECS и очистка. |
-| `arch/turing/kernel_gsp_falcon_tu102.c` | Состояние exploit-режима для каждого BDF и ограниченное ожидание остановки только для Booter. |
-| `arch/turing/kernel_gsp_tu102.c` | Состояние повторной попытки, свежие метаданные WPR, проверки готовности GSP и проверка политики PCIe для TU102. |
+| `generated/g_kernel_gsp_nvoc.h` | Stores a private copy of the stock signature and its size. |
+| `kernel/gpu/gsp/kernel_gsp.c` | CMP50 gate, signature allocation/replacement, stock-signature restore, and boot-state logs. |
+| `arch/turing/kernel_gsp_booter_tu102.c` | Falcon/SEC2 checks, native Booter launch, WPR/FECS readback, and cleanup. |
+| `arch/turing/kernel_gsp_falcon_tu102.c` | Per-BDF exploit-mode state and a Booter-only bounded halt wait. |
+| `arch/turing/kernel_gsp_tu102.c` | Retry state, fresh WPR metadata, GSP-ready checks, and the TU102 PCIe policy gate. |
 
 ### Пошаговое поведение
 
@@ -146,16 +146,16 @@ Booter. Полезный результат — обычное состояни�
    значением `0x00000CBD`. Затем выбранные dword формируют ограниченную
    транзакцию Booter. Важные значения:
 
-   | Смещение/значение подписи | Используемый патчем смысл |
+   | Signature offset/value | Meaning used by the patch |
    | --- | --- |
-   | `0x0000 = 0x00020001`, `0x0880 = 0x344`, `0x0884 = 1` | Заголовок, похожий на штатный, и метаданные LS |
-   | `0xF974 = 0x00409650` | Регистр защиты FECS feature-override |
-   | `0xF988 = 0x88888888`, `0xBB20 = 8` | Значения выбора SM на полной скорости |
-   | `0xF9A4 = 0x00409664`, `0xBB38 = 0x0040966C` | Адреса выбора SM FECS |
-   | `0xBB4C = 0xFFFFFF8F` | Итоговая маска защиты FECS |
-   | `0xBB98 = 0x8E1B0`, `0xBBC8 = 0x8E110`, `0xBBF8 = 0x8E12C`, `0xBC28 = 0x8E11C` | Записи политики XP3G для TU102 |
-   | `0xBC58/0xBCB8 = 0x1FA828/0x1FA824` | Состояние старших/младших битов WPR2 |
-   | `0xBC88/0xBCE8 = 0x8403C4` | Регистр защиты сброса SEC2 |
+   | `0x0000 = 0x00020001`, `0x0880 = 0x344`, `0x0884 = 1` | stock-looking header and LS metadata |
+   | `0xF974 = 0x00409650` | FECS feature-override protection register |
+   | `0xF988 = 0x88888888`, `0xBB20 = 8` | full-speed SM selector values |
+   | `0xF9A4 = 0x00409664`, `0xBB38 = 0x0040966C` | FECS SM selector addresses |
+   | `0xBB4C = 0xFFFFFF8F` | final FECS protection mask |
+   | `0xBB98 = 0x8E1B0`, `0xBBC8 = 0x8E110`, `0xBBF8 = 0x8E12C`, `0xBC28 = 0x8E11C` | TU102 XP3G policy writes |
+   | `0xBC58/0xBCB8 = 0x1FA828/0x1FA824` | WPR2 high/low state |
+   | `0xBC88/0xBCE8 = 0x8403C4` | SEC2 reset-protection register |
 
    Патч называет эти значения guard, pivot, writer, PLM, WPR2 или хвостами
    очистки. Эти имена объясняют назначение, но сами по себе не доказывают
@@ -300,11 +300,11 @@ CMP50 и устанавливает `NV2080_CTRL_GR_INFO_INDEX_RT_CORE_COUNT` в
 3. Функция отображает страницу XVE размером 4 КиБ по смещению BAR0 `0x88000`
    и читает:
 
-   | Смещение XVE | Назначение |
+   | XVE offset | Role |
    | ---: | --- |
-   | `0x724` | Регистр разблокировки CYA; запись `0x30` |
-   | `0xBBC` | Чтение возможности ReBAR |
-   | `0xDCC` | Конфигурация ReBAR; бит 31 включает, младшая тетрада — селектор |
+   | `0x724` | CYA unlock register; write `0x30` |
+   | `0xBBC` | ReBAR capability readback |
+   | `0xDCC` | ReBAR configuration; bit 31 enables, low nibble is the selector |
 
 4. Все остальные биты конфигурации сохраняются, старый размер в младшей
    тетраде очищается, устанавливаются включение и выбранный размер, затем
