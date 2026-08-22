@@ -25,7 +25,7 @@
 На чистой системе Ubuntu или Debian с установленной CMP 50HX (`10de:1e09`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xrip/cmp50hx-unlock/master/install.sh | sudo bash
+curl -fsSL https://xrip.github.io/cmp50hx-unlock/install.sh | sudo bash
 ```
 
 Установщик добавляет инструменты сборки, устанавливает пользовательскую часть
