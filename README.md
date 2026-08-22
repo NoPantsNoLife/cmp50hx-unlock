@@ -1,3 +1,5 @@
+Русская версия: [README.RU.md](README.RU.md)
+
 # CMP50HX 610.43.03 patch guide
 
 This file is the working record for the four patches in this directory. It
