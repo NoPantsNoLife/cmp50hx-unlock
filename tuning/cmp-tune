@@ -391,8 +391,11 @@ def sync_governor(clock):
             os.remove(GOV_DROPIN)
             action = "CMP_LOAD_CLOCK cleared"
         subprocess.run(["systemctl", "daemon-reload"], check=False, timeout=30)
-        subprocess.run(["systemctl", "try-restart", GOV_UNIT],
-                       check=False, timeout=60)
+        # --no-block: this may run from a unit ordered Before= the governor
+        # (applying a profile at boot), and a blocking restart would deadlock
+        # against that ordering. Queueing the job is enough either way.
+        subprocess.run(["systemctl", "try-restart", "--no-block", GOV_UNIT],
+                       check=False, timeout=30)
         return action
     except (OSError, subprocess.SubprocessError) as exc:
         print("  warning: could not sync the idle governor: %s" % exc)

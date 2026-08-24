@@ -92,12 +92,29 @@ with the power limit and both offsets untouched throughout.
 
 Pass `--no-sync-governor` to leave the drop-in alone.
 
+## Applying a profile at boot
+
+Tuning is runtime state, so after a reboot the card is back at stock and the
+governor releases to the stock boost clock rather than your tuned one. To make
+a profile stick, enable the shipped unit:
+
+```sh
+sudo cp cmp-tune-profile.service /etc/systemd/system/
+sudoedit /etc/systemd/system/cmp-tune-profile.service   # pick the profile
+sudo systemctl enable --now cmp-tune-profile
+```
+
+It is ordered `Before=cmp-idle-governor.service`, so the `CMP_LOAD_CLOCK`
+drop-in is in place before the governor starts and the governor releases to
+the tuned clock. Nothing depends on the unit, so a failure does not block
+boot — but see the warning below before enabling it.
+
 ## Notes and limits
 
-- Everything set here is **runtime state** and is gone after a reboot, by
-  design. To apply a profile at boot, add a small unit or an `ExecStartPost`
-  of your own; there is deliberately no auto-apply, because an unstable
-  overclock that re-applies on every boot is hard to recover from.
+- Auto-apply at boot is **opt-in on purpose**: an unstable overclock that
+  re-applies on every boot is awkward to recover from. Validate a profile
+  interactively first, and keep in mind that `systemctl disable
+  cmp-tune-profile` plus a reboot always gets you back to stock.
 - VF offsets shift the whole curve, so the effective clock under load can end
   up above `clock_max` unless a lock is in force. That is why a tuned profile
   should normally set a clock bound too.

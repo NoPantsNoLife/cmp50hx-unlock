@@ -1,0 +1,24 @@
+[Unit]
+# Optional: apply a cmp-tune profile once per boot.
+#
+# Tuning is runtime state by design, so without this the card comes back at
+# stock settings after a reboot. Ordered before the idle governor so the
+# CMP_LOAD_CLOCK drop-in that cmp-tune writes is in place when the governor
+# starts, and the governor then releases to the tuned clock instead of the
+# stock boost clock.
+#
+# Edit the profile name in ExecStart to taste, then:
+#   sudo systemctl enable --now cmp-tune-profile
+Description=Apply CMP tuning profile
+After=multi-user.target
+Before=cmp-idle-governor.service
+Wants=cmp-idle-governor.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/cmp-tune apply efficient
+# Nothing depends on this unit, so a failure here does not block boot.
+
+[Install]
+WantedBy=multi-user.target
