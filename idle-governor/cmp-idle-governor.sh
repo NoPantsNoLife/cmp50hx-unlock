@@ -20,6 +20,13 @@
 #                    worst-case delay before a new job gets full clocks.
 #   CMP_IDLE_AFTER   consecutive idle polls before clamping (default 6).
 #   CMP_UTIL         utilisation percent still counted as idle (default 5).
+#   CMP_LOAD_CORE_OFFSET
+#                    core VF offset to restore when work appears. While idle
+#                    the offset is set to 0, because a non-zero core offset
+#                    pins the card in P0 and keeps memory at its full clock:
+#                    measured 40 W clamped with +225, versus 32.5 W with the
+#                    offset dropped, memory falling 7500 -> 5000 on its own.
+#                    Written automatically by "cmp-tune apply".
 #   CMP_LOAD_CLOCK   what to restore when work appears, as "MIN,MAX" or a
 #                    single MHz value. Unset (default) means reset the lock
 #                    entirely. Set this to the clock range your tuning profile
@@ -35,6 +42,8 @@ POLL="${CMP_POLL:-5}"
 IDLE_AFTER="${CMP_IDLE_AFTER:-6}"
 UTIL_THRESHOLD="${CMP_UTIL:-5}"
 LOAD_CLOCK="${CMP_LOAD_CLOCK:-}"
+LOAD_CORE_OFFSET="${CMP_LOAD_CORE_OFFSET:-}"
+CMP_TUNE="${CMP_TUNE:-/usr/local/bin/cmp-tune}"
 
 log() { printf '%s cmp-idle-governor: %s\n' "$(date -Is)" "$*"; }
 
@@ -82,11 +91,25 @@ detect_idle_clock() {
     fi
 }
 
+# A non-zero core VF offset pins the card in P0, which holds memory at its
+# full clock even with the core clamped. Dropping the offset while idle lets
+# the card reach P3 and memory falls on its own. Only meaningful when a tuning
+# profile set an offset in the first place.
+set_core_offset() {
+    local idx="$1" value="$2"
+    [[ -n "${LOAD_CORE_OFFSET}" ]] || return 0
+    [[ -x "${CMP_TUNE}" ]] || return 0
+    "${CMP_TUNE}" -i "$idx" core-offset "$value" --quiet >/dev/null 2>&1
+}
+
 # Hand the card back to whatever should own its clocks: an explicit tuning
 # range if one was configured, otherwise no lock at all. Never leave a GPU
 # clamped at the idle ceiling.
 release_gpu() {
     local idx="$1"
+    # restore the tuning offset first, so the card never runs unclamped with
+    # a curve that differs from the profile
+    set_core_offset "$idx" "${LOAD_CORE_OFFSET:-0}"
     if [[ -n "${LOAD_CLOCK}" ]]; then
         nvidia-smi -i "$idx" -lgc "${LOAD_CLOCK}" >/dev/null 2>&1
     else
@@ -110,7 +133,7 @@ for g in "${GPUS[@]}"; do
     clamp_mhz["$g"]="${CMP_IDLE_CLOCK:-$(detect_idle_clock "$g")}"
     log "GPU $g: idle ceiling ${clamp_mhz[$g]} MHz"
 done
-log "managing CMP GPU indices: ${GPUS[*]} (clamp after $((POLL * IDLE_AFTER))s idle${LOAD_CLOCK:+, restoring ${LOAD_CLOCK} MHz on load})"
+log "managing CMP GPU indices: ${GPUS[*]} (clamp after $((POLL * IDLE_AFTER))s idle${LOAD_CLOCK:+, restoring ${LOAD_CLOCK} MHz on load}${LOAD_CORE_OFFSET:+, core offset ${LOAD_CORE_OFFSET}})"
 
 release_all() {
     for g in "${GPUS[@]}"; do
@@ -131,8 +154,11 @@ while true; do
                   && "${idle_count[$idx]}" -ge "$IDLE_AFTER" ]]; then
                 if nvidia-smi -i "$idx" -lgc "${clamp_mhz[$idx]}" \
                         >/dev/null 2>&1; then
+                    # drop the tuning offset too: a non-zero core offset pins
+                    # the card in P0 and holds memory at its full clock
+                    set_core_offset "$idx" 0
                     state["$idx"]=clamped
-                    log "GPU $idx: idle, clamped to ${clamp_mhz[$idx]} MHz"
+                    log "GPU $idx: idle, clamped to ${clamp_mhz[$idx]} MHz${LOAD_CORE_OFFSET:+ (core offset dropped)}"
                 else
                     log "GPU $idx: clamp failed"
                 fi

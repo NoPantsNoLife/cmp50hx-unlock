@@ -16,6 +16,8 @@ Usage:
   cmp-tune status               live state and the card's supported ranges
   cmp-tune apply PROFILE        apply it
   cmp-tune reset                back to card defaults
+  cmp-tune core-offset N        set the core VF offset directly (the idle
+                                governor uses this to drop to P3 while idle)
 
   -i, --index N                 act on one GPU (default: all)
       --no-sync-governor        do not touch the idle governor drop-in
@@ -365,31 +367,41 @@ def governor_present():
     return out.stdout.strip() in ("enabled", "enabled-runtime", "static")
 
 
-def sync_governor(clock):
-    """Keep the governor from clearing a tuned clock when it releases.
+def sync_governor(clock, core_offset=None):
+    """Keep the governor in step with the applied profile.
 
-    The governor and this tool drive the same NVML locked-clock setting, so
-    without this the governor's release would drop the profile's clock lock
-    and the card would boost past it while the VF offset stays live.
+    Two reasons. The governor and this tool drive the same NVML locked-clock
+    setting, so without this its release would drop the profile's clock lock
+    and the card would boost past it while the VF offset stays live. And a
+    non-zero core VF offset pins the card in P0, which holds memory at its
+    full clock during the idle clamp, so the governor needs to know which
+    offset to put back when it releases.
     """
     if not governor_present():
         return None
     try:
-        if clock:
-            lo, hi = clock
-            value = "%d,%d" % (lo, hi)
+        if clock or core_offset:
+            lines = ["# written by cmp-tune; keeps the governor's release\n",
+                     "# in step with the applied tuning profile.\n",
+                     "[Service]\n"]
+            bits = []
+            if clock:
+                value = "%d,%d" % clock
+                lines.append("Environment=CMP_LOAD_CLOCK=%s\n" % value)
+                bits.append("CMP_LOAD_CLOCK=%s" % value)
+            if core_offset:
+                lines.append("Environment=CMP_LOAD_CORE_OFFSET=%d\n"
+                             % core_offset)
+                bits.append("CMP_LOAD_CORE_OFFSET=%d" % core_offset)
             os.makedirs(GOV_DROPIN_DIR, exist_ok=True)
             with open(GOV_DROPIN, "w") as fh:
-                fh.write("# written by cmp-tune; keeps the governor's release\n"
-                         "# in step with the applied tuning profile.\n"
-                         "[Service]\n"
-                         "Environment=CMP_LOAD_CLOCK=%s\n" % value)
-            action = "CMP_LOAD_CLOCK=%s" % value
+                fh.writelines(lines)
+            action = ", ".join(bits)
         else:
             if not os.path.exists(GOV_DROPIN):
                 return None
             os.remove(GOV_DROPIN)
-            action = "CMP_LOAD_CLOCK cleared"
+            action = "governor overrides cleared"
         subprocess.run(["systemctl", "daemon-reload"], check=False, timeout=30)
         # --no-block: this may run from a unit ordered Before= the governor
         # (applying a profile at boot), and a blocking restart would deadlock
@@ -496,12 +508,14 @@ def cmd_apply(args, nvml, parser):
         plans.append((idx, h, resolve(values, Limits(nvml, h), args.profile, idx)))
 
     applied_clock = None
+    applied_core_offset = None
     for idx, h, plan in plans:
         print("GPU %d: %s" % (idx, describe(plan)))
         if "power_mw" in plan:
             nvml.set_power_limit(h, plan["power_mw"])
         if "core_offset" in plan:
             nvml.set_core_offset(h, plan["core_offset"])
+            applied_core_offset = plan["core_offset"]
         if "mem_offset" in plan:
             nvml.set_mem_offset(h, plan["mem_offset"])
         if plan.get("clock"):
@@ -511,7 +525,7 @@ def cmd_apply(args, nvml, parser):
             nvml.reset_locked_clocks(h)
 
     if args.sync_governor:
-        action = sync_governor(applied_clock)
+        action = sync_governor(applied_clock, applied_core_offset)
         if action:
             print("idle governor: %s" % action)
     print("applied profile %r" % args.profile)
@@ -530,9 +544,23 @@ def cmd_reset(args, nvml):
         print("GPU %d: power %.0f W, offsets 0, clock lock cleared"
               % (idx, lim.power_max_w))
     if args.sync_governor:
-        action = sync_governor(None)
+        action = sync_governor(None, None)
         if action:
             print("idle governor: %s" % action)
+
+
+def cmd_core_offset(args, nvml):
+    need_root()
+    for idx, h, model in targets(nvml, args.index, quiet=True):
+        rng = nvml.core_offset_range(h)
+        if rng is None:
+            raise SystemExit("GPU %d does not expose a core VF offset" % idx)
+        if not (rng[0] <= args.value <= rng[1]):
+            raise SystemExit("core offset %+d is outside the card's %+d..%+d MHz"
+                             % (args.value, rng[0], rng[1]))
+        nvml.set_core_offset(h, args.value)
+        if not args.quiet:
+            print("GPU %d: core offset %+d MHz" % (idx, args.value))
 
 
 def main():
@@ -552,6 +580,9 @@ def main():
     p_apply = sub.add_parser("apply")
     p_apply.add_argument("profile")
     sub.add_parser("reset")
+    p_off = sub.add_parser("core-offset")
+    p_off.add_argument("value", type=int)
+    p_off.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args()
 
     path, parser = load_config()
@@ -571,6 +602,8 @@ def main():
             cmd_apply(args, nvml, parser)
         elif args.command == "reset":
             cmd_reset(args, nvml)
+        elif args.command == "core-offset":
+            cmd_core_offset(args, nvml)
     except NvmlError as exc:
         raise SystemExit("NVML: %s" % exc)
     finally:

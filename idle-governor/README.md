@@ -73,6 +73,7 @@ Defaults are conservative. Override with a systemd drop-in
 | `CMP_POLL` | `5` | seconds between samples; also the worst-case delay before a new job gets full clocks |
 | `CMP_IDLE_AFTER` | `6` | consecutive idle polls before clamping (6 × 5 s = 30 s) |
 | `CMP_UTIL` | `5` | utilisation percent still treated as idle |
+| `CMP_LOAD_CORE_OFFSET` | unset | core VF offset to restore on load; while idle the offset is set to 0 so the card can reach P3. Written by `cmp-tune apply` |
 
 Example — clamp sooner, react faster:
 
@@ -132,11 +133,31 @@ Then the card goes 2100 MHz under load → 300 MHz idle → back to exactly
 `CMP_LOAD_CLOCK` also accepts a range, e.g. `1700,1980` to match
 `vfctl set-range`.
 
-One more measured detail: with a memory offset applied, the memory clock stays
-at its raised value during the idle clamp (7500 MHz above, versus 5000 MHz on a
-stock card), so idle power lands near **40 W instead of 32 W**. Still well below
-the 63 W baseline, just not the full saving. The governor manages core clocks
-only and deliberately does not touch your memory tuning.
+### Why the core offset is dropped while idle
+
+A non-zero **core** VF offset pins the card in P0, and in P0 the memory clock
+never steps down — so a tuned card would idle at ~40 W instead of ~32 W even
+with the core clamped. Measured, core clamped to 300 MHz throughout:
+
+| core offset | mem offset | P-state | memory | power |
+|---|---|---|---|---|
+| +225 | +1000 | P0 | 7500 MHz | 40.0 W |
+| **0** | +1000 | **P3** | **5000 MHz** | **32.5 W** |
+| +225 | 0 | P0 | 7000 MHz | 39.6 W |
+| +225 | −2000 | P0 | 6801 MHz | 39.5 W |
+| **0** | −2000 | **P3** | **5000 MHz** | **32.6 W** |
+
+The memory offset makes no difference to this; the core offset decides it, and
+once the card reaches P3 memory drops to 5000 MHz on its own. So the governor
+sets the core offset to 0 while clamped and restores `CMP_LOAD_CORE_OFFSET` on
+release. Your memory tuning is never touched.
+
+Note there is no way to select a P-state directly: NVML exposes
+`nvmlDeviceGetPerformanceState` but no setter, `-lmc` is rejected on this card
+("Setting locked Memory clocks is not supported"), and `-ac` is deprecated.
+P3 is the deepest state reachable from the host — the card advertises a
+405 MHz memory tier too, but only the firmware idle path can select it, and
+that path is what does not work on this SKU.
 
 Order of operations does not matter — apply the vfctl profile before or after
 starting the governor — as long as `CMP_LOAD_CLOCK` matches the clock your
