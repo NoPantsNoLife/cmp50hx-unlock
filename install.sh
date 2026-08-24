@@ -20,7 +20,8 @@
 #      cmp90hx-gen2 boot service (enabled, not started)
 #   7. installs the optional idle governor unit, enabled only with
 #      --idle-governor
-#   8. best-effort live check of the card
+#   8. installs the cmp-tune profile tuning utility
+#   9. best-effort live check of the card
 #
 # It never rebuilds the initramfs and never unloads a loaded driver. When the
 # card works, make it boot-persistent with:
@@ -308,6 +309,23 @@ else
     governor_state="not present in this repository copy"
 fi
 
+# --- 6d. tuning utility -----------------------------------------------------
+
+# Profile-driven power/clock/offset tuning. Ships a default profile file and
+# seeds /etc/cmp-tune.conf once, so later upgrades never clobber local edits.
+tuning_dir="${install_dir}/tuning"
+if [[ -f "${tuning_dir}/cmp-tune" ]]; then
+    chmod 0755 "${tuning_dir}/cmp-tune"
+    ln -sf "${tuning_dir}/cmp-tune" /usr/local/bin/cmp-tune
+    if [[ ! -f /etc/cmp-tune.conf ]]; then
+        install -m 0644 "${tuning_dir}/profiles.conf" /etc/cmp-tune.conf
+        log "seeded /etc/cmp-tune.conf with the default tuning profiles"
+    else
+        log "kept the existing /etc/cmp-tune.conf"
+    fi
+    log "installed cmp-tune (try: cmp-tune list, cmp-tune status)"
+fi
+
 # --- 7. best-effort live check (never fatal) --------------------------------
 
 live_check="SKIPPED"
@@ -370,6 +388,7 @@ Repository : ${install_dir}
 Log        : ${install_dir}/logs/install-${ts}.log
 Live check : ${live_check}
 Idle governor: ${governor_state}
+Tuning     : cmp-tune list | cmp-tune status | sudo cmp-tune apply PROFILE
 
 Next steps:
   1. Confirm the card works (the verifier above, or nvidia-smi after a reboot).
@@ -392,6 +411,7 @@ Boot service: cmp90hx-gen2.service (enabled; runs once per boot after reboot)
 Log        : ${install_dir}/logs/install-${ts}.log
 Live check : ${live_check}
 Idle governor: ${governor_state}
+Tuning     : cmp-tune list | cmp-tune status | sudo cmp-tune apply PROFILE
 
 Next steps:
   1. Reboot. On a COLD boot the cmp90hx-gen2 service runs ~35 driver reload

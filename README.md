@@ -112,6 +112,47 @@ Trade-off: a job starting while the card is clamped runs at the idle clock for
 up to one poll interval (5 s by default, tunable). Details, measurements, and
 tuning: [`idle-governor/README.md`](idle-governor/README.md).
 
+## Tuning: optional profiles
+
+[`tuning/`](tuning/README.md) adds `cmp-tune`, a profile-driven utility for
+power limit, core/memory VF offsets and the locked core-clock range. It uses
+NVML directly (via `ctypes`, no build step) because `nvidia-smi` cannot set VF
+offsets.
+
+```bash
+cmp-tune list                    # profiles
+cmp-tune status                  # live state + the ranges your card reports
+cmp-tune show efficient          # dry run
+sudo cmp-tune apply efficient
+sudo cmp-tune reset
+```
+
+Profiles live in `/etc/cmp-tune.conf`; every key is optional:
+
+```ini
+[efficient]
+power_w = 170
+core_offset = 225
+mem_offset = 1000
+clock_max = 2100
+```
+
+Key behaviours:
+
+- **Bounds come from the card.** Omit `clock_min` and the card's own minimum
+  supported clock is used (omit `clock_max` and its maximum is), so a lock
+  always stays inside the card's real range. Every value is validated against
+  what the card reports and an out-of-range profile is refused with the exact
+  limits.
+- **Only CMP cards are touched** — CMP 50HX (`10de:1e09`) and CMP 90HX
+  (`10de:220d`), matched by PCI ID. Any other GPU is listed and skipped.
+- **Multi-GPU:** applies to every CMP card by default, `-i N` for one.
+- **Composes with the idle governor:** applying a clock lock writes the
+  governor's `CMP_LOAD_CLOCK` drop-in automatically, so its release restores
+  the tuned clock instead of clearing it.
+
+Settings are runtime state and clear on reboot, by design.
+
 ## CMP 90HX support
 
 The 90HX path is architecturally different from the 50HX one and is a port of

@@ -40,8 +40,34 @@ log() { printf '%s cmp-idle-governor: %s\n' "$(date -Is)" "$*"; }
 
 command -v nvidia-smi >/dev/null || { log "nvidia-smi not found"; exit 1; }
 
-mapfile -t GPUS < <(nvidia-smi --query-gpu=index --format=csv,noheader,nounits)
-[[ ${#GPUS[@]} -gt 0 ]] || { log "no GPUs found"; exit 1; }
+# Only CMP cards are managed. A box can hold a display card or another
+# accelerator, and clamping those is not wanted. Override with CMP_GPUS as a
+# comma-separated index list if you need to.
+# nvidia-smi reports pci.device_id as 0xDDDDVVVV (device, then vendor).
+SUPPORTED_PCI_IDS="0x1E0910DE 0x220D10DE"   # CMP 50HX, CMP 90HX
+
+select_gpus() {
+    if [[ -n "${CMP_GPUS:-}" ]]; then
+        tr ',' ' ' <<< "${CMP_GPUS}"
+        return
+    fi
+    while IFS=', ' read -r idx pciid; do
+        [[ -n "${idx:-}" && -n "${pciid:-}" ]] || continue
+        for want in ${SUPPORTED_PCI_IDS}; do
+            if [[ "${pciid^^}" == "${want^^}" ]]; then
+                printf '%s
+' "$idx"
+                break
+            fi
+        done
+    done < <(nvidia-smi --query-gpu=index,pci.device_id                         --format=csv,noheader,nounits)
+}
+
+mapfile -t GPUS < <(select_gpus)
+if [[ ${#GPUS[@]} -eq 0 ]]; then
+    log "no supported CMP card found (CMP 50HX / CMP 90HX); nothing to manage"
+    exit 0
+fi
 
 # Lowest supported graphics clock for this GPU, so the same unit works on a
 # 50HX (300 MHz) and on any other card without hardcoding a model.
@@ -84,7 +110,7 @@ for g in "${GPUS[@]}"; do
     clamp_mhz["$g"]="${CMP_IDLE_CLOCK:-$(detect_idle_clock "$g")}"
     log "GPU $g: idle ceiling ${clamp_mhz[$g]} MHz"
 done
-log "managing GPU indices: ${GPUS[*]} (clamp after $((POLL * IDLE_AFTER))s idle${LOAD_CLOCK:+, restoring ${LOAD_CLOCK} MHz on load})"
+log "managing CMP GPU indices: ${GPUS[*]} (clamp after $((POLL * IDLE_AFTER))s idle${LOAD_CLOCK:+, restoring ${LOAD_CLOCK} MHz on load})"
 
 release_all() {
     for g in "${GPUS[@]}"; do
