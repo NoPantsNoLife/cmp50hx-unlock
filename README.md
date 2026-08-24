@@ -85,6 +85,33 @@ Notes:
 - Real RT execution stays impossible; this unlocks full SM/Tensor speed, the
   16 GiB BAR1, and PCIe Gen2 (see [`docs/CMP50HX.md`](docs/CMP50HX.md)).
 
+## Idle power: optional governor
+
+The card idles at **62–64 W** doing nothing, and it never lowers its own clock
+request: even an explicit `min,max` range lock is resolved to the maximum. The
+one lever the firmware honours from the host is a hard clock ceiling, which
+drops the card to **32.4 W**.
+
+[`idle-governor/`](idle-governor/README.md) supplies that ceiling
+automatically — clamp when idle, release the moment work appears:
+
+| | Idle | Under load |
+|---|---|---|
+| without | 62–64 W | full clocks |
+| with | **32.4 W** | full clocks, restored within one poll |
+
+About **−29 W per idle card**. It is optional, independent of the unlock, and
+keeps runtime state only (stopping it releases every clamp). Enable during
+install with `--idle-governor`, or later:
+
+```bash
+sudo systemctl enable --now cmp-idle-governor
+```
+
+Trade-off: a job starting while the card is clamped runs at the idle clock for
+up to one poll interval (5 s by default, tunable). Details, measurements, and
+tuning: [`idle-governor/README.md`](idle-governor/README.md).
+
 ## CMP 90HX support
 
 The 90HX path is architecturally different from the 50HX one and is a port of

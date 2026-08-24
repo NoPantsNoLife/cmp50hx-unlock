@@ -5,6 +5,11 @@
 #   curl -fsSL https://raw.githubusercontent.com/xrip/cmp50hx-unlock/master/install.sh | sudo bash
 #   curl -fsSL https://raw.githubusercontent.com/xrip/cmp50hx-unlock/master/install.sh | sudo bash -s -- --card cmp90hx
 #
+# Options:
+#   --card cmp50hx|cmp90hx   force the card instead of auto-detecting
+#   --idle-governor          also enable the optional idle clock governor,
+#                            which halves idle power (see idle-governor/)
+#
 # What it does, in order:
 #   1. detects the card (or takes --card cmp50hx|cmp90hx)
 #   2. installs build tools and kernel headers
@@ -13,7 +18,9 @@
 #   5. installs the modules with a backup of any previous ones, runs depmod
 #   6. cmp90hx only: installs the rejoin16 Gen2 apply scripts and the
 #      cmp90hx-gen2 boot service (enabled, not started)
-#   7. best-effort live check of the card
+#   7. installs the optional idle governor unit, enabled only with
+#      --idle-governor
+#   8. best-effort live check of the card
 #
 # It never rebuilds the initramfs and never unloads a loaded driver. When the
 # card works, make it boot-persistent with:
@@ -33,6 +40,7 @@ die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 trap 'die "install failed at line ${LINENO}; see output above"' ERR
 
 card=''
+idle_governor=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --card)
@@ -41,12 +49,16 @@ while [[ $# -gt 0 ]]; do
                 || die "unknown card: ${card} (supported: cmp50hx, cmp90hx)"
             shift 2
             ;;
+        --idle-governor)
+            idle_governor=1
+            shift
+            ;;
         -h|--help)
-            sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
-            die "unknown argument: $1 (only --card is supported)"
+            die "unknown argument: $1 (supported: --card, --idle-governor)"
             ;;
     esac
 done
@@ -269,6 +281,33 @@ if [[ "${card}" == cmp90hx ]]; then
     log "installed and enabled cmp90hx-gen2.service (runs the PLM opens + Gen2 retrain once per boot; NOT started now)"
 fi
 
+# --- 6c. optional idle clock governor ---------------------------------------
+
+# The card never lowers its own clock request, so this supervisor applies a
+# clock ceiling while idle and removes it on load. Optional and independent of
+# the unlock: the unit is always installed, but only enabled on request.
+governor_state="installed, NOT enabled (enable: systemctl enable --now cmp-idle-governor)"
+governor_dir="${install_dir}/idle-governor"
+if [[ -f "${governor_dir}/cmp-idle-governor.sh" ]]; then
+    chmod 0755 "${governor_dir}/cmp-idle-governor.sh"
+    install -m 0644 "${governor_dir}/cmp-idle-governor.service" \
+        /etc/systemd/system/cmp-idle-governor.service
+    systemctl daemon-reload
+    if [[ "${idle_governor}" -eq 1 ]]; then
+        if systemctl enable --now cmp-idle-governor.service >/dev/null 2>&1; then
+            governor_state="ENABLED and running (idle power should drop within ~30s)"
+            log "idle governor enabled and started"
+        else
+            governor_state="install ok, but enable failed (see: journalctl -u cmp-idle-governor)"
+            log "WARNING: could not enable the idle governor"
+        fi
+    else
+        log "idle governor installed but not enabled (pass --idle-governor to enable)"
+    fi
+else
+    governor_state="not present in this repository copy"
+fi
+
 # --- 7. best-effort live check (never fatal) --------------------------------
 
 live_check="SKIPPED"
@@ -330,6 +369,7 @@ Modules    : /lib/modules/${krel}/updates/nvidia*.ko (patched ${driver_version})
 Repository : ${install_dir}
 Log        : ${install_dir}/logs/install-${ts}.log
 Live check : ${live_check}
+Idle governor: ${governor_state}
 
 Next steps:
   1. Confirm the card works (the verifier above, or nvidia-smi after a reboot).
@@ -351,6 +391,7 @@ Runtime    : ${install_dir}/cmp90hx (rejoin16 apply + verify + cmpunlocker-rs)
 Boot service: cmp90hx-gen2.service (enabled; runs once per boot after reboot)
 Log        : ${install_dir}/logs/install-${ts}.log
 Live check : ${live_check}
+Idle governor: ${governor_state}
 
 Next steps:
   1. Reboot. On a COLD boot the cmp90hx-gen2 service runs ~35 driver reload
