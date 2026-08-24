@@ -1,11 +1,19 @@
 Русская версия: [README.RU.md](README.RU.md)
 
-# CMP50HX 610.43.03 patch guide
+# CMP 50HX / CMP 90HX 610.43.03 unlock guide
 
-This file is the working record for the four patches in this directory. It
-explains the code path, the reason for each change, the checks that support it,
-and the limits of the proof. The series is for the official NVIDIA
-`610.43.03` open-module source and for the tested CMP50HX PCI identity:
+This repo builds and installs patched NVIDIA `610.43.03` open kernel modules
+for the CMP 50HX (TU102) and the CMP 90HX (GA102). The 50HX patches are
+developed and proven here; the 90HX path is a port of the rejoin16 work by
+[jdowning100/cmpunlocker](https://github.com/jdowning100/cmpunlocker) (GPL-2.0),
+built on the [pearlfortune/cmpunlocker](https://github.com/pearlfortune/cmpunlocker)
+v0.1.28 90hx-stockflow bundle.
+
+The rest of this file is the working record for the four CMP50HX patches in
+`patches/cmp50hx/`. It explains the code path, the reason for each change, the
+checks that support it, and the limits of the proof. The series is for the
+official NVIDIA `610.43.03` open-module source and for the tested CMP50HX PCI
+identity:
 
 | Field | Packed RM value | Linux PCI value |
 | --- | ---: | ---: |
@@ -49,6 +57,22 @@ Rollback: `sudo /opt/cmp50hx-unlock/install-initramfs.sh --rollback` restores
 the previous initramfs; module backups are under
 `/opt/cmp50hx-unlock/backups/`.
 
+On a CMP 90HX (`10de:220d`) the card is forced explicitly (the installer
+also auto-detects it when it is the only CMP card):
+
+```bash
+curl -fsSL https://xrip.github.io/cmp50hx-unlock/install.sh | sudo bash -s -- --card cmp90hx
+```
+
+The 90HX build additionally downloads the pinned pearlfortune
+`v0.1.28` 90hx-stockflow bundle (SHA-256 checked) and installs the
+`cmp90hx-gen2` boot service. After the reboot, wait for the service to finish
+(see below), then verify:
+
+```bash
+sudo /opt/cmp50hx-unlock/cmp90hx/verify.sh    # PASS_CMP90HX_ALL_LIVE
+```
+
 Notes:
 
 - Secure Boot must be disabled, or the unsigned module will not load (the
@@ -60,6 +84,70 @@ Notes:
   `/opt/cmp50hx-unlock/cache`; re-runs reuse them.
 - Real RT execution stays impossible; this unlocks full SM/Tensor speed, the
   16 GiB BAR1, and PCIe Gen2 (see [`docs/CMP50HX.md`](docs/CMP50HX.md)).
+
+## CMP 90HX support
+
+The 90HX path is architecturally different from the 50HX one and is a port of
+the rejoin16 line from
+[jdowning100/cmpunlocker](https://github.com/jdowning100/cmpunlocker)
+(GPL-2.0), cold-boot validated there on 2026-08-16 (35-cycle apply, 5 GT/s,
+compute full). It has **not** been re-validated end-to-end by this repo on
+90HX hardware yet.
+
+What it unlocks on a CMP 90HX (`10de:220d`):
+
+| Feature | Mechanism |
+|---|---|
+| Full SM compute throughput (~26x FP32) | stockflow patches `0014`+`0015` from the pinned pearlfortune bundle |
+| PCIe Gen2 x4 (5.0 GT/s) | rejoin16: PLM opens + kernel-context speed path + bridge retrain |
+| Full gfx issue-rate bin (19x fill rate) | `GFX_SPEED_SELECT` `0x823830 = 0x4` once its PLM (`0x823b04`) is open |
+
+JTAG (Host2Jtag) is **not** solved on GA102 (the GA100 PJTAG PLM addresses do
+not apply and the GA102 PJTAG block is not publicly documented); the word
+"jtag" in the patch filename refers to the PLM-open table, not a working JTAG
+path.
+
+Measured on the source project's card (`10de:220d`, subsystem `10de:1555`):
+FP32 0.72 → 18.78 TFLOP/s, TF32 41.13, FP16→FP32 80.47 TFLOP/s; PCIe host
+transfers 1.0 → 1.7 GB/s at Gen2 x4.
+
+Layout and flow:
+
+- `patches/cmp90hx/0016-…-rejoin16-pcie-jtag-plm.patch` — the kernel patch:
+  a crafted-Booter single-write slot per module load plus the in-kernel Gen2
+  speed-path config, gated on subsystem `10de:1555` and on all PCIe privilege
+  masks being open (`0x823800 == 0xffffffff`).
+- `cmp90hx/build-candidate.sh` — the vendored candidate builder; applies
+  bundle `0014`+`0015` then our `0016`.
+- `cmp90hx/rejoin16-apply-all.sh` (with `rejoin16-cycle.sh`,
+  `retry-gen2-train.sh`, `bar0poke`) — the per-boot apply: ~35 module reload
+  cycles, one privilege-mask open each, then the bridge retrain. A warm reboot
+  skips the cycles when the masks are still open.
+- `cmp90hx/cmp90hx-gen2.service` — systemd unit running the apply once per
+  boot after `multi-user.target`. The installer enables it but never starts
+  it in the install session.
+- `cmp90hx/verify.sh` — read-only post-boot check ending in
+  `PASS_CMP90HX_ALL_LIVE` (module resolution, PLM set, link speed on both
+  ends, and the `cmpunlocker-rs` compute verify).
+
+Build inputs are pinned and SHA-256 checked by `build.sh --card cmp90hx`: the
+NVIDIA `NVIDIA-kernel-module-source-610.43.03.tar.xz` and the pearlfortune
+`cmpunlocker-v0.1.28-linux-x64-90hx-stockflow.tar.gz`.
+
+Limits and cautions:
+
+- One build serves one card type; the installer refuses a host that has both
+  a 50HX and a 90HX unless `--card` forces the choice.
+- The kernel Gen2 path only runs on subsystem `10de:1555`; other `10de:220d`
+  boards get a warning and keep the stock path.
+- The PLM opens re-latch on every cold boot, so the service must run each
+  boot (~7–8 min on a cold boot).
+- If the GPU shares a PCIe switch with the boot disk or the NIC, a wedged
+  PCIe endpoint can hang the whole host; keep console/power access for the
+  first boots.
+- Rollback: `systemctl disable --now cmp90hx-gen2`, remove
+  `/etc/systemd/system/cmp90hx-gen2.service`, then restore the module
+  backups as for the 50HX.
 
 ## Fresh performance results
 
@@ -359,8 +447,7 @@ surface; the Linux writes and retrain still require host-source and live proof.
 
 **L:** the tested package reaches an active `5.0 GT/s x4` link on both endpoint
 and upstream bridge, with PCIe transfer rates around `1.70--1.71 GB/s` and no
-new PCIe/AER errors. See the package
-[README](../README.md) and the performance matrix linked above.
+new PCIe/AER errors. See the performance matrix linked above.
 
 The patch deliberately does not add GA100-only OPT or unrelated XP3G register
 writes. The extra XP3G policy in patch 01 is guarded by exact CMP50/TU102
@@ -393,6 +480,5 @@ The package builder applies this exact order:
 3. host ReBAR setup;
 4. host PCIe endpoint/bridge retrain.
 
-See [`build.sh`](../build.sh), the package [`README.md`](../README.md), and the
-top-level [`docs/CMP50HX.md`](../../../docs/CMP50HX.md) for the operational and
-runtime limits.
+See [`build.sh`](build.sh) and [`docs/CMP50HX.md`](docs/CMP50HX.md) for the
+operational and runtime limits.
