@@ -87,28 +87,28 @@ Notes:
 
 ## Idle power: optional governor
 
-The card idles at **62–64 W** doing nothing, and it never lowers its own clock
-request: even an explicit `min,max` range lock is resolved to the maximum. The
-one lever the firmware honours from the host is a hard clock ceiling, which
-drops the card to **32.4 W**.
+The card idles at **62–64 W** doing nothing, and it never lowers its own
+P-state request: even an explicit `min,max` range lock is resolved to the
+maximum. The private NVAPI P-state control can force the card to P8 at about
+**1.8 W**.
 
-[`idle-governor/`](idle-governor/README.md) supplies that ceiling
-automatically — clamp when idle, release the moment work appears:
+[`idle-governor/`](idle-governor/README.md) supplies that P-state request
+automatically — force P8 when idle, release to P16 when work appears:
 
 | | Idle | Under load |
 |---|---|---|
 | without | 62–64 W | full clocks |
-| with | **32.4 W** | full clocks, restored within one poll |
+| with | **1.8 W (P8)** | full clocks, restored within one poll |
 
-About **−29 W per idle card**. It is optional, independent of the unlock, and
-keeps runtime state only (stopping it releases every clamp). Enable during
+About **−61 W per idle card**. It is optional, independent of the unlock, and
+keeps runtime state only (stopping it releases the forced state). Enable during
 install with `--idle-governor`, or later:
 
 ```bash
 sudo systemctl enable --now cmp-idle-governor
 ```
 
-Trade-off: a job starting while the card is clamped runs at the idle clock for
+Trade-off: a job starting while the card is in P8 runs at the idle clock for
 up to one poll interval (5 s by default, tunable). Details, measurements, and
 tuning: [`idle-governor/README.md`](idle-governor/README.md).
 
@@ -148,8 +148,8 @@ Key behaviours:
   (`10de:220d`), matched by PCI ID. Any other GPU is listed and skipped.
 - **Multi-GPU:** applies to every CMP card by default, `-i N` for one.
 - **Composes with the idle governor:** applying a clock lock writes the
-  governor's `CMP_LOAD_CLOCK` drop-in automatically, so its release restores
-  the tuned clock instead of clearing it.
+  governor's `CMP_LOAD_CLOCK` drop-in automatically. The lock is cleared while
+  P8 is forced and restored when work appears.
 
 Settings are runtime state and clear on reboot, by design.
 

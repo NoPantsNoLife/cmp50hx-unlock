@@ -91,8 +91,9 @@ clock and curve. `cmp-tune reset` removes it.
 
 The core offset matters for idle power: a non-zero core VF offset pins the card
 in P0 and keeps memory at full clock, so the governor drops the offset while
-clamped and puts it back on load. That is worth ~7 W per card at idle.
-Verified end to end: 2100 MHz under load → 300 MHz idle → back to 2100 MHz,
+forcing P8 and puts it back on load. That is worth about 7 W per card compared
+with the old P3 workaround. Verified end to end: 2100 MHz under load → P8 idle
+→ back to 2100 MHz,
 with the power limit and both offsets untouched throughout.
 
 Pass `--no-sync-governor` to leave the drop-in alone.
@@ -125,7 +126,7 @@ boot — but see the warning below before enabling it.
   should normally set a clock bound too.
 - Power limit and memory offset survive an idle-governor clamp/release cycle
   untouched. The core offset is deliberately dropped while idle and restored
-  on load, so the card can reach P3 — see the governor's README.
+  on load, so the card can reach P8 — see the governor's README.
 - Values that a profile omits are left exactly as they are — a profile is not
   a full reset. Use `cmp-tune reset` for that, or a profile with no keys
   (`[stock]`).

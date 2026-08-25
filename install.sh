@@ -7,7 +7,7 @@
 #
 # Options:
 #   --card cmp50hx|cmp90hx   force the card instead of auto-detecting
-#   --idle-governor          also enable the optional idle clock governor,
+#   --idle-governor          also enable the optional idle P-state governor,
 #                            which halves idle power (see idle-governor/)
 #
 # What it does, in order:
@@ -282,15 +282,17 @@ if [[ "${card}" == cmp90hx ]]; then
     log "installed and enabled cmp90hx-gen2.service (runs the PLM opens + Gen2 retrain once per boot; NOT started now)"
 fi
 
-# --- 6c. optional idle clock governor ---------------------------------------
+# --- 6c. optional idle P-state governor -------------------------------------
 
-# The card never lowers its own clock request, so this supervisor applies a
-# clock ceiling while idle and removes it on load. Optional and independent of
-# the unlock: the unit is always installed, but only enabled on request.
+# CMP cards do not lower their own P-state request, so this supervisor forces
+# P8 while idle and returns to P16 on load. Optional and independent of the
+# unlock: the unit is always installed, but only enabled on request.
 governor_state="installed, NOT enabled (enable: systemctl enable --now cmp-idle-governor)"
 governor_dir="${install_dir}/idle-governor"
-if [[ -f "${governor_dir}/cmp-idle-governor.sh" ]]; then
+if [[ -f "${governor_dir}/cmp-idle-governor.sh" \
+      && -f "${governor_dir}/cmp-pstate.py" ]]; then
     chmod 0755 "${governor_dir}/cmp-idle-governor.sh"
+    chmod 0755 "${governor_dir}/cmp-pstate.py"
     install -m 0644 "${governor_dir}/cmp-idle-governor.service" \
         /etc/systemd/system/cmp-idle-governor.service
     systemctl daemon-reload
