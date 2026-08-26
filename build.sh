@@ -65,12 +65,18 @@ case "${card}" in
         readonly source_url="https://github.com/NVIDIA/open-gpu-kernel-modules/archive/refs/tags/${driver_version}.tar.gz"
         readonly source_sha256="9df87d753cd9c05aa0eedc462af9b35debb549a657136e863282f94c96ee2640"
         readonly patch_dir="${script_dir}/patches/cmp50hx"
+        # 05-cmp50-auto-pstate.patch is deliberately not built. A cold-boot A/B
+        # on 2026-08-26 proved it pins the card at P8 645/405 even at 100% load
+        # (22x memory bandwidth, 2.9x compute), and it breaks the idle
+        # governor: with it applied, the P16 release leaves the card at P8. Use
+        # the idle governor instead, which reaches about 2 W idle and restores
+        # full clocks on release. Evidence:
+        # experiments/cmp50-pstate-20260824/runs/20260826T092500Z-patch05-ab-cold-boot/
         patch_order=(
             01-cmp50-stockflow.patch
             02-cmp50-rt-core-count.patch
             03-cmp50-rebar.patch
             04-cmp50-pcie-gen2.patch
-            05-cmp50-auto-pstate.patch
         )
         ;;
     cmp90hx)
