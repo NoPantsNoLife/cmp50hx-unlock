@@ -8,7 +8,7 @@
 # Options:
 #   --card cmp50hx|cmp90hx   force the card instead of auto-detecting
 #   --idle-governor          also enable the optional idle P-state governor,
-#                            which halves idle power (see idle-governor/)
+#                            which drops idle power to about 2 W (see idle-governor/)
 #
 # What it does, in order:
 #   1. detects the card (or takes --card cmp50hx|cmp90hx)

@@ -26,13 +26,19 @@ vendor, device, and subsystem fields. The two forms must not be mixed when a
 new patch is made.
 
 The split is mechanical, not a new code path: patch 01 is 5 files/24 hunks,
-patch 02 is 1 file/1 hunk, patch 03 is 1 file/4 hunks, patch 04 is 1
-file/3 hunks, and patch 05 is 1 file/1 hunk. Patch 05 is a guarded
-CMP50-only registry policy preparation for native P-State setup; it does not
-prove automatic idle/load selection. The optional idle governor remains the
-proven runtime workaround until a clean native idle/load/idle result exists.
-The old monolithic patch and this ordered series produce the same eight changed
-source files, plus the registry preparation in patch 05.
+patch 02 is 1 file/1 hunk, patch 03 is 1 file/4 hunks, and patch 04 is 1
+file/3 hunks. The old monolithic patch and this ordered series produce the
+same eight changed source files.
+
+Patch 05 (`05-cmp50-auto-pstate.patch`) is **deliberately not built**. A
+cold-boot A/B on 2026-08-26 proved it does not enable native idle/load
+selection: it pins the card at P8 645/405 even at 100% load (about 22x less
+memory bandwidth, 2.9x less compute) and breaks the idle governor, because
+with it the P16 release no longer restores clocks. The file is kept on disk
+for research only. Native automatic P-State selection was investigated to
+completion and is not host-reachable — the enable sits behind a readiness
+barrier inside signed GSP-RM — so the optional idle governor below is the
+idle-power solution.
 
 ## Quick install (Ubuntu/Debian)
 
