@@ -9,7 +9,7 @@ developed and proven here; the 90HX path is a port of the rejoin16 work by
 built on the [pearlfortune/cmpunlocker](https://github.com/pearlfortune/cmpunlocker)
 v0.1.28 90hx-stockflow bundle.
 
-The rest of this file is the working record for the four CMP50HX patches in
+The rest of this file is the working record for the five CMP50HX patches in
 `patches/cmp50hx/`. It explains the code path, the reason for each change, the
 checks that support it, and the limits of the proof. The series is for the
 official NVIDIA `610.43.03` open-module source and for the tested CMP50HX PCI
@@ -26,9 +26,13 @@ vendor, device, and subsystem fields. The two forms must not be mixed when a
 new patch is made.
 
 The split is mechanical, not a new code path: patch 01 is 5 files/24 hunks,
-patch 02 is 1 file/1 hunk, patch 03 is 1 file/4 hunks, and patch 04 is 1
-file/3 hunks. The old monolithic patch and this ordered series produce the same
-eight changed source files.
+patch 02 is 1 file/1 hunk, patch 03 is 1 file/4 hunks, patch 04 is 1
+file/3 hunks, and patch 05 is 1 file/1 hunk. Patch 05 is a guarded
+CMP50-only registry policy preparation for native P-State setup; it does not
+prove automatic idle/load selection. The optional idle governor remains the
+proven runtime workaround until a clean native idle/load/idle result exists.
+The old monolithic patch and this ordered series produce the same eight changed
+source files, plus the registry preparation in patch 05.
 
 ## Quick install (Ubuntu/Debian)
 

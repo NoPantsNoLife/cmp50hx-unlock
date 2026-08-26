@@ -70,6 +70,7 @@ case "${card}" in
             02-cmp50-rt-core-count.patch
             03-cmp50-rebar.patch
             04-cmp50-pcie-gen2.patch
+            05-cmp50-auto-pstate.patch
         )
         ;;
     cmp90hx)
