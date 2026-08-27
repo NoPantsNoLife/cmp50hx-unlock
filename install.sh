@@ -249,6 +249,9 @@ for mod in nvidia nvidia-uvm nvidia-modeset nvidia-drm nvidia-peermem; do
     log "installed /lib/modules/${krel}/updates/${mod}.ko"
 done
 
+# nouveau must not claim the card before the patched module at boot
+printf 'blacklist nouveau\n' > /etc/modprobe.d/cmp-unlock.conf
+
 # cmp50hx carries the ReBAR size as a module option; cmp90hx takes none
 if [[ "${card}" == cmp50hx ]]; then
     printf 'options nvidia cmp50_rebar_size=8\n' > /etc/modprobe.d/cmp50hx-unlock.conf
