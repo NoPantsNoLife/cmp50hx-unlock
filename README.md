@@ -121,6 +121,10 @@ maximum. The private NVAPI P-state control can force the card to P8 at about
 [`idle-governor/`](idle-governor/README.md) supplies that P-state request
 automatically — force P8 when idle, release to P16 when work appears:
 
+The active service is a single C ELF, `cmp-governor`. It calls NVML and the
+private NVAPI entry point directly; Bash, Python, and `nvidia-smi` are not in
+the runtime path.
+
 | | Idle | Under load |
 |---|---|---|
 | without | 62–64 W | full clocks |
@@ -173,9 +177,10 @@ Key behaviours:
 - **Only CMP cards are touched** — CMP 50HX (`10de:1e09`) and CMP 90HX
   (`10de:220d`), matched by PCI ID. Any other GPU is listed and skipped.
 - **Multi-GPU:** applies to every CMP card by default, `-i N` for one.
-- **Composes with the idle governor:** applying a clock lock writes the
-  governor's `CMP_LOAD_CLOCK` drop-in automatically. The lock is cleared while
-  P8 is forced and restored when work appears.
+- **Composes with the idle governor:** applying a profile writes the C
+  governor's clock, core offset, memory offset, and power settings to its
+  systemd drop-in. The clock lock and core offset are cleared while P8 is
+  forced and restored when work appears.
 
 Settings are runtime state and clear on reboot, by design.
 

@@ -3,6 +3,10 @@
 Cuts idle power roughly in half. It is **not** part of the unlock and nothing
 else depends on it.
 
+The active service is one C ELF: `cmp-governor`. It loads NVML and the private
+NVAPI entry point directly. The runtime path has no Bash, Python, or
+`nvidia-smi` helper.
+
 ## Why it is needed
 
 The card does not lower its own P-state request. Measured on a CMP 50HX
@@ -75,6 +79,8 @@ Defaults are conservative. Override with a systemd drop-in
 | `CMP_IDLE_AFTER` | `6` | consecutive idle polls before clamping (6 × 5 s = 30 s) |
 | `CMP_UTIL` | `5` | utilisation percent still treated as idle |
 | `CMP_LOAD_CORE_OFFSET` | unset | core VF offset to restore on load; while idle the offset is set to 0 so the card can reach P8. Written by `cmp-tune apply` |
+| `CMP_LOAD_MEM_OFFSET` | unset | memory VF offset applied by the C governor at start |
+| `CMP_LOAD_POWER_W` | unset | power limit in watts applied by the C governor at start |
 | `CMP_LOAD_CLOCK` | unset | optional NVML clock range to restore on load; it is cleared before forcing P8 |
 
 Example — clamp sooner, react faster:

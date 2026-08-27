@@ -7,12 +7,9 @@ After=multi-user.target
 
 [Service]
 Type=simple
-# Persistence keeps P8 stable when no client holds the GPU.
-# ExecStopPost releases via the script so a configured CMP_LOAD_CLOCK tuning
-# range is restored rather than cleared.
-ExecStartPre=/usr/bin/nvidia-smi -pm 1
-ExecStart=/opt/cmp50hx-unlock/idle-governor/cmp-idle-governor.sh
-ExecStopPost=/opt/cmp50hx-unlock/idle-governor/cmp-idle-governor.sh --release
+# The governor owns NVML and the private NVAPI calls directly. The service
+# starts one ELF process: no shell, Python, or nvidia-smi helper is needed.
+ExecStart=/opt/cmp50hx-unlock/idle-governor/cmp-governor
 Restart=on-failure
 RestartSec=10
 

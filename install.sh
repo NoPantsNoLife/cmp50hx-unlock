@@ -301,15 +301,19 @@ fi
 # unlock: the unit is always installed, but only enabled on request.
 governor_state="installed, NOT enabled (enable: systemctl enable --now cmp-idle-governor)"
 governor_dir="${install_dir}/idle-governor"
-if [[ -f "${governor_dir}/cmp-idle-governor.sh" \
-      && -f "${governor_dir}/cmp-pstate.py" ]]; then
-    chmod 0755 "${governor_dir}/cmp-idle-governor.sh"
-    chmod 0755 "${governor_dir}/cmp-pstate.py"
+if [[ -f "${governor_dir}/cmp-governor.c" ]]; then
+    log "building the single-process C idle governor"
+    cc -O2 -Wall -Wextra -Werror -std=c11 \
+        "${governor_dir}/cmp-governor.c" -ldl \
+        -o "${governor_dir}/cmp-governor" \
+        || die "could not build the C idle governor"
+    chmod 0755 "${governor_dir}/cmp-governor"
     install -m 0644 "${governor_dir}/cmp-idle-governor.service" \
         /etc/systemd/system/cmp-idle-governor.service
     systemctl daemon-reload
     if [[ "${idle_governor}" -eq 1 ]]; then
-        if systemctl enable --now cmp-idle-governor.service >/dev/null 2>&1; then
+        if systemctl enable cmp-idle-governor.service >/dev/null 2>&1 \
+                && systemctl restart cmp-idle-governor.service >/dev/null 2>&1; then
             governor_state="ENABLED and running (idle power should drop within ~30s)"
             log "idle governor enabled and started"
         else
@@ -317,6 +321,10 @@ if [[ -f "${governor_dir}/cmp-idle-governor.sh" \
             log "WARNING: could not enable the idle governor"
         fi
     else
+        if systemctl is-enabled cmp-idle-governor.service >/dev/null 2>&1; then
+            systemctl restart cmp-idle-governor.service >/dev/null 2>&1 || \
+                log "WARNING: could not restart the enabled idle governor"
+        fi
         log "idle governor installed but not enabled (pass --idle-governor to enable)"
     fi
 else
