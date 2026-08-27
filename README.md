@@ -1,4 +1,4 @@
-Русская версия: [README.RU.md](README.RU.md)
+Русская версия: [README.RU.md](README.RU.md) · [20 GB guide](docs/20GB.md) · [20 GB guide (RU)](docs/20GB_RU.md)
 
 # CMP 50HX / CMP 90HX 610.43.03 unlock guide
 
@@ -24,6 +24,24 @@ identity:
 The packed values are used by RM/GSP code. The Linux module uses the split
 vendor, device, and subsystem fields. The two forms must not be mixed when a
 new patch is made.
+
+## CMP 50HX 20 GB support
+
+Patch `01-cmp50-stockflow.patch` supports both the original 10 GB layout and
+the 20 GB layout. The old patch used fixed 10 GB WPR2 addresses and could fail
+with NVIDIA Booter error `0x8d` on a 20 GB card. The updated patch reads the
+stock FWSEC WPR2 range for each GPU, accepts only the known `0xe00` span, and
+keeps the low/high values in per-BDF state for later boot checks.
+
+The 20 GB path was validated with four `10de:1e09` / `10de:1554` cards, each
+reporting `20480 MiB`, on NVIDIA Open `610.43.03`. See the [20 GB guide](docs/20GB.md)
+for the install order, checks, and host limits. The Russian guide is
+[available here](docs/20GB_RU.md).
+
+10 GB and 20 GB CMP 50HX cards may be installed together. WPR2 state is keyed
+by each card's PCI bus/device address, so one card's memory geometry is never
+used for another card. This mixed-size arrangement is supported by the design;
+verify every card after the first cold boot.
 
 The split is mechanical, not a new code path: patch 01 is 5 files/24 hunks,
 patch 02 is 1 file/1 hunk, patch 03 is 1 file/4 hunks, and patch 04 is 1

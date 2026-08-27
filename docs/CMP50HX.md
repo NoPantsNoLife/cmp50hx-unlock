@@ -24,7 +24,18 @@ a compute or VRAM-bandwidth regression.
 The target is PCI ID `10de:1e09`, a Turing `TU102` CMP 50HX with 56 SMs and
 3584 CUDA cores. It is not an RTX 2080 die: RTX 2080 uses TU104. The useful
 target is normal RTX-class Turing behavior from the enabled TU102 units, with
-the stock 10 GB memory layout left unchanged.
+the stock 10 GB or 20 GB memory layout left unchanged. The 20 GB install and
+validation record is in [`docs/20GB.md`](20GB.md).
+
+### Dynamic WPR2 support for 20 GB cards
+
+The original stockflow patch compared WPR2 against the 10 GB constants
+`0x027fe000`/`0x027fee00`. A validated 20 GB board instead reports
+`WPR high:low = 0x04ffee00:0x04ffe000`, with the same `0xe00` span. The updated
+patch captures the range produced by stock FWSEC separately for every PCI BDF,
+accepts only that span, and stores both bounds for all later retry, handoff, and
+GSP-ready checks. It never learns bounds from the temporary WPR-down sentinel
+state and fails closed if the geometry is unexpected.
 
 ### End-user all-feature package
 
@@ -185,7 +196,7 @@ remain are outside software: a real RTX TU102 reference to disprove the fuse
 model, or physical fuse work. Neither is a driver change.
 
 This does not weaken the compute result. Full SM speed, 3584 CUDA cores, 448
-Tensor cores, and the 10 GB layout are unaffected and still pass.
+Tensor cores, and both tested memory layouts are unaffected and still pass.
 
 ## Live hardware checkpoint: 2026-08-11
 
@@ -1954,8 +1965,9 @@ wrappers check the patched hashes. System files stay unchanged.
 ## Next realistic unlock candidates
 
 Exact RTX 2080 Ti equivalence is not possible by software alone: this card
-reports `56` SMs / `3584` CUDA cores / `448` Tensor cores and has a 10 GB
-memory layout, while the missing SMs and memory are physical configuration.
+reports `56` SMs / `3584` CUDA cores / `448` Tensor cores and has a board-fixed
+10 GB or 20 GB memory layout, while the missing SMs and memory are physical
+configuration.
 The useful candidates are therefore:
 
 1. **Real RT execution — highest value and the main target.** The host count
