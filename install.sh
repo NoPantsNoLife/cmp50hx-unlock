@@ -22,10 +22,10 @@
 #      --idle-governor
 #   8. installs the cmp-tune profile tuning utility
 #   9. best-effort live check of the card
+#  10. rebuilds and verifies the initramfs for the running kernel
 #
-# It never rebuilds the initramfs and never unloads a loaded driver. When the
-# card works, make it boot-persistent with:
-#   sudo /opt/cmp50hx-unlock/install-initramfs.sh
+# It never reboots or unloads a loaded driver. Reboot after the installer
+# reports PASS_CMP_INITRAMFS to load the patched module at boot.
 set -Eeuo pipefail
 
 readonly driver_version="610.43.03"
@@ -268,6 +268,15 @@ depmod -a "${krel}"
 [[ "$(modinfo -F version nvidia)" == "${driver_version}" ]] || die "installed nvidia.ko has the wrong version"
 [[ "$(modinfo -F vermagic nvidia)" == "${krel} "* ]] || die "installed nvidia.ko has the wrong vermagic"
 
+# --- 6a. make the patched module boot-persistent -----------------------------
+initramfs_state="SKIPPED"
+log "making the patched modules boot-persistent"
+if bash "${install_dir}/install-initramfs.sh"; then
+    initramfs_state="PASS_CMP_INITRAMFS"
+else
+    die "initramfs setup failed"
+fi
+
 # --- 6b. cmp90hx: rejoin16 runtime + boot service ----------------------------
 
 if [[ "${card}" == cmp90hx ]]; then
@@ -392,14 +401,12 @@ Modules    : /lib/modules/${krel}/updates/nvidia*.ko (patched ${driver_version})
 Repository : ${install_dir}
 Log        : ${install_dir}/logs/install-${ts}.log
 Live check : ${live_check}
+Initramfs  : ${initramfs_state}
 Idle governor: ${governor_state}
 Tuning     : cmp-tune list | cmp-tune status | sudo cmp-tune apply PROFILE
 
 Next steps:
-  1. Confirm the card works (the verifier above, or nvidia-smi after a reboot).
-  2. Make it boot-persistent:
-         sudo ${install_dir}/install-initramfs.sh
-  3. Reboot.
+  1. Reboot to load the patched module at boot.
 
 Rollback:
   modules : copy files from ${backup_dir:-/opt/cmp50hx-unlock/backups/} back to
@@ -415,6 +422,7 @@ Runtime    : ${install_dir}/cmp90hx (rejoin16 apply + verify + cmpunlocker-rs)
 Boot service: cmp90hx-gen2.service (enabled; runs once per boot after reboot)
 Log        : ${install_dir}/logs/install-${ts}.log
 Live check : ${live_check}
+Initramfs  : ${initramfs_state}
 Idle governor: ${governor_state}
 Tuning     : cmp-tune list | cmp-tune status | sudo cmp-tune apply PROFILE
 
@@ -426,9 +434,6 @@ Next steps:
      switch with the boot disk or NIC, a wedged endpoint can hang the host.
   2. After the service finishes, verify:
          sudo ${install_dir}/cmp90hx/verify.sh
-  3. Make the module boot-persistent:
-         sudo ${install_dir}/install-initramfs.sh
-
 Rollback:
   service : systemctl disable --now cmp90hx-gen2 && rm /etc/systemd/system/cmp90hx-gen2.service
   modules : copy files from ${backup_dir:-/opt/cmp50hx-unlock/backups/} back to

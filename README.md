@@ -68,16 +68,14 @@ curl -fsSL https://xrip.github.io/cmp50hx-unlock/install.sh | sudo bash
 
 The installer adds the build tools, installs the NVIDIA `610.43.03` userland
 from the official `.run` package, builds the patched modules for the running
-kernel, installs them with a backup, and runs `depmod`. It never rebuilds the
-initramfs and never unloads a loaded driver. It ends with a best-effort live
-check of the card.
+kernel, installs them with a backup, blacklists `nouveau`, rebuilds and verifies
+the initramfs, and runs `depmod`. It never reboots or unloads a loaded driver.
+It ends with a best-effort live check of the card.
 
-When the card works (the verifier prints
-`PASS_CMP50HX_ISSUE_RATE_AND_COUNTS`), make the change persistent across
-boots:
+When the installer prints `PASS_CMP_INITRAMFS`, reboot to load the patched
+module at boot:
 
 ```bash
-sudo /opt/cmp50hx-unlock/install-initramfs.sh
 sudo reboot
 ```
 
