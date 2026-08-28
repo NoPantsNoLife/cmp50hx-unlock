@@ -277,7 +277,19 @@ else
     die "initramfs setup failed"
 fi
 
-# --- 6b. cmp90hx: rejoin16 runtime + boot service ----------------------------
+# --- 6b. cmp50hx: PCIe Gen2 boot service --------------------------------------
+
+if [[ "${card}" == cmp50hx ]]; then
+    runtime_dir="${install_dir}/cmp50hx"
+    [[ -f "${runtime_dir}/cmp50hx-gen2.sh" ]] || die "repository layout broken: cmp50hx/cmp50hx-gen2.sh missing"
+    install -m 0755 "${runtime_dir}/cmp50hx-gen2.sh" /usr/local/sbin/cmp50hx-gen2
+    install -m 0644 "${runtime_dir}/cmp50hx-gen2.service" /etc/systemd/system/cmp50hx-gen2.service
+    systemctl daemon-reload
+    systemctl enable cmp50hx-gen2.service >/dev/null
+    log "installed and enabled cmp50hx-gen2.service (the card unlocks its PCIe speed registers a few minutes after boot; the service retrains to Gen2 then; NOT started now)"
+fi
+
+# --- 6c. cmp90hx: rejoin16 runtime + boot service ----------------------------
 
 if [[ "${card}" == cmp90hx ]]; then
     runtime_dir="${install_dir}/cmp90hx"
@@ -294,7 +306,7 @@ if [[ "${card}" == cmp90hx ]]; then
     log "installed and enabled cmp90hx-gen2.service (runs the PLM opens + Gen2 retrain once per boot; NOT started now)"
 fi
 
-# --- 6c. optional idle P-state governor -------------------------------------
+# --- 6d. optional idle P-state governor -------------------------------------
 
 # CMP cards do not lower their own P-state request, so this supervisor forces
 # P8 while idle and returns to P16 on load. Optional and independent of the
@@ -331,7 +343,7 @@ else
     governor_state="not present in this repository copy"
 fi
 
-# --- 6d. tuning utility -----------------------------------------------------
+# --- 6e. tuning utility -----------------------------------------------------
 
 # Profile-driven power/clock/offset tuning. Ships a default profile file and
 # seeds /etc/cmp-tune.conf once, so later upgrades never clobber local edits.
