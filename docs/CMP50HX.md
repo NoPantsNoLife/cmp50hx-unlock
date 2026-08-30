@@ -2347,9 +2347,11 @@ CMP50 conditions are true, so this is not another closed gate. A separate
 off-by-default field at `+0x25430` controls only
 `VK_NV_ray_tracing_validation`; `NV_ALLOW_RAYTRACING_VALIDATION=1` and profile
 key `0xfa85c8` feed that field. Eglcore also has RT task-priority thresholds:
-sync `4096` and async `8192`. Their branch effect is proved, but their units
-and throughput cost are not yet known, so they are documented as a measured
-follow-up rather than patched.
+sync `4096` and async `8192`. Interface query selector 6 supplies the compared
+task value. Defaults select recursive/synchronous work below 4096, an eligible
+background-worker band at 4096..8191, and direct interface submit at 8192 or
+higher. This is CPU task scheduling, not an RT feature or instruction gate.
+Only its compile-time performance effect remains open; it is not patched.
 
 On the current live card, RM reports 56 RT cores and Vulkan reports
 `accelerationStructure`, `rayQuery`, and
