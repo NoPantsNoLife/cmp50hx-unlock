@@ -5,7 +5,7 @@ NVIDIA 610.43.03 userspace library. It is separate from the kernel-module
 patches in this repository.
 
 The rule is based on the research in [Cyridd/cmpunlocker](https://github.com/Cyridd/cmpunlocker),
-especially its [`cmp_glcore_patch`](https://github.com/Cyridd/cmpunlocker/tree/main/cmp_glcore_patch)
+especially its [`cmp_glcore_patch`](https://github.com/Cyridd/cmpunlocker/tree/2cf043be130167abe1298d667a378693b6253517/cmp_glcore_patch)
 tool and commit [`2cf043b`](https://github.com/Cyridd/cmpunlocker/commit/2cf043be130167abe1298d667a378693b6253517).
 The upstream project states MIT licensing, but this repository does not copy
 its source. `patch_eglcore.py` is a small independent implementation of the
@@ -14,9 +14,11 @@ documented byte-pattern rule.
 ## Build a private library
 
 Do not overwrite the NVIDIA file in `/usr/lib`. Give the installed library as
-input and a new path as output:
+input and a new path as output. The tested path needs Python 3, Bash, and
+`readelf` from `binutils`:
 
 ```bash
+mkdir -p "$PWD/eglcore-patched"
 python3 userspace-patch/patch_eglcore.py \
   /usr/lib/x86_64-linux-gnu/libnvidia-eglcore.so.610.43.03 \
   "$PWD/eglcore-patched/libnvidia-eglcore.so.610.43.03" 0
@@ -49,6 +51,8 @@ the loader wrapper cannot cross the Steam runtime boundary:
 LD_LIBRARY_PATH=/path/to/eglcore-patched:$LD_LIBRARY_PATH %command%
 ```
 
+This Steam/Proton fallback was not tested in this work.
+
 ## Safety and rollback
 
 Keep the original driver library. Do not mix libraries from different NVIDIA
@@ -68,7 +72,16 @@ remote recovery access.
 python3 -m unittest discover -s userspace-patch/tests -v
 ```
 
-Validated CMP50HX measurements for NVIDIA 610.43.03 changed 100 P8 binds from
-45,234,208 to 88,032 GPU ticks with argument `0` (about 514x lower). Render
-output stayed correct in that test. This is a pipeline-bind result, not proof
-of an RT-core or general shader unlock.
+The validated input was
+`/usr/lib/x86_64-linux-gnu/libnvidia-eglcore.so.610.43.03`, SHA-256
+`35517c07dc35c1d966f7c8102deca9cd1f4925f689f95b9ffacbfada3ef6e8f8`.
+The two pattern offsets were `0xad5f6c` and `0xc65010`.
+
+The first CMP50HX P8 comparison changed 100 binds from 45,234,208 to 88,032
+GPU ticks with argument `0` (about 514x lower). The final packaged scripts
+gave 88,096 ticks in a second run with `LD_LIBRARY_PATH` unset. The render
+matched the reference byte-for-byte, with SHA-256
+`8b16870a8f539ac7e43c00dfa4d3255f8699f0211498002480cddc485f870c48`.
+All six Linux tests passed, the system library hash stayed unchanged, and no
+recent NVRM, Xid, AER, or PCIe error was seen. This is a pipeline-bind result,
+not proof of an RT-core or general shader unlock.
