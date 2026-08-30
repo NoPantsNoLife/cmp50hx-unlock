@@ -2313,3 +2313,29 @@ The patch is based on the byte-pattern research in
 copied because this repository uses an independent implementation. It is
 version-specific, applies only to a private library copy, and is not evidence
 of an RT-core or general shader unlock.
+
+## Eglcore class and RT exposure map
+
+The full 610.43.03 IDA and live-host record is kept in the parent research
+workspace at `experiments/cmp50-eglcore-capability-map`. It records the
+exact target hash, RM control structures, all recovered class-mask table rows,
+the RT-count data flow, Vulkan extension and feature predicates, IDB changes,
+the 2026-08-30 read-only live result, and a cross-check against all earlier RT
+experiments.
+
+The key correction is that device-state `+0x158` is a graphics-class
+capability mask, not framebuffer data. CMP 50HX is selected as generic
+`C597 TURING_A` with TU102 implementation and receives mask
+`0x00200000`; no direct PCI ID `0x1e09` comparison was found in
+this path. RT count comes from RM GR-info index `0x22` and is combined
+with profile key `0x0e3595` into the proved userspace gate at
+`+0x269f0`.
+
+On the current live card, RM reports 56 RT cores and Vulkan reports
+`accelerationStructure`, `rayQuery`, and
+`rayTracingPipeline` as true. This closes the userspace exposure gate
+for the present setup. It does not change the lower execution failure: the
+first special ray-query SM instruction is still known to raise
+`INVALID_OPCODE`, stall FECS, and end in Xid 109. A broad patch of
+`+0x158` is therefore unsafe, and an added eglcore RT-count patch is
+redundant on the current live setup.
