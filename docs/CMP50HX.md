@@ -2323,6 +2323,15 @@ the RT-count data flow, Vulkan extension and feature predicates, IDB changes,
 the 2026-08-30 read-only live result, and a cross-check against all earlier RT
 experiments.
 
+The extension-record layout was then rechecked from the record base rather
+than from the callback-pointer slot. Each record is `0x120` bytes, its string
+starts at `+4`, and its callback pointer is at `+0x108`. This corrects the
+earlier callback labels: every exact consumer in this group belongs to ray
+tracing, acceleration structures, or a direct dependency. The full table now
+covers KHR acceleration structure, ray query, ray-tracing pipeline,
+maintenance and position fetch; EXT opacity micromap, pipeline-library group
+handles and invocation reorder; and the related NV extensions.
+
 The key correction is that device-state `+0x158` is a graphics-class
 capability mask, not framebuffer data. CMP 50HX is selected as generic
 `C597 TURING_A` with TU102 implementation and receives mask
@@ -2330,6 +2339,17 @@ capability mask, not framebuffer data. CMP 50HX is selected as generic
 this path. RT count comes from RM GR-info index `0x22` and is combined
 with profile key `0x0e3595` into the proved userspace gate at
 `+0x269f0`.
+
+The same gate selects RT compiler modes, is copied into physical-device shader
+state, and enables one compiler-input byte in both the NVVM/ucode and SPIR-V
+pipeline paths. The compiler option bit defaults to on (`3 & 2`), and all live
+CMP50 conditions are true, so this is not another closed gate. A separate
+off-by-default field at `+0x25430` controls only
+`VK_NV_ray_tracing_validation`; `NV_ALLOW_RAYTRACING_VALIDATION=1` and profile
+key `0xfa85c8` feed that field. Eglcore also has RT task-priority thresholds:
+sync `4096` and async `8192`. Their branch effect is proved, but their units
+and throughput cost are not yet known, so they are documented as a measured
+follow-up rather than patched.
 
 On the current live card, RM reports 56 RT cores and Vulkan reports
 `accelerationStructure`, `rayQuery`, and
@@ -2339,3 +2359,11 @@ first special ray-query SM instruction is still known to raise
 `INVALID_OPCODE`, stall FECS, and end in Xid 109. A broad patch of
 `+0x158` is therefore unsafe, and an added eglcore RT-count patch is
 redundant on the current live setup.
+
+The expanded parent-workspace read-only run at
+`experiments/cmp50-eglcore-capability-map/runs/20260830T101217Z-live-read-only`
+also confirms exposure of opacity micromap, both NV/EXT invocation-reorder
+extensions, cluster and partitioned acceleration structures, and their KHR
+dependencies. Linear swept spheres, motion blur, and RT validation remain
+unexposed for their separate class/state conditions. The probe submitted no
+GPU work.

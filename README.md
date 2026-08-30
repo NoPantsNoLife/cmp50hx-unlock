@@ -129,6 +129,14 @@ This is based on the research in [Cyridd/cmpunlocker](https://github.com/Cyridd/
 and is separate from the kernel-module unlock. It does not prove an RT-core or
 general shader unlock.
 
+The separate eglcore RT-capability study is summarized in
+[`docs/CMP50HX.md`](docs/CMP50HX.md#eglcore-class-and-rt-exposure-map). It maps
+the exact extension records, the `RT_CORE_COUNT && profile 0x0e3595` gate,
+compiler consumers, validation-only environment/profile control, RT task
+priority defaults, and the read-only live enumeration. These userspace paths
+are already open on the tested card except for extensions with additional
+class/state conditions; none makes the SM accept the faulting ray instruction.
+
 ## Idle power: optional governor
 
 The card idles at **62–64 W** doing nothing, and it never lowers its own
