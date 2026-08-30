@@ -2289,3 +2289,18 @@ Build, one-shot test, recovery, and Shell command instructions are in
 `ReBarUEFI/Cmp50Pkg/README.md`. RT core count 56 is intentionally outside this
 package. The first read-only F54 image and its extraction proof are in
 `artifacts/cmp50-uefi-f54-20260819/`.
+
+## Userspace Vulkan pipeline-bind path
+
+The optional [`userspace-patch/`](../userspace-patch/README.md) is a separate
+userspace experiment. On the tested CMP50HX with NVIDIA 610.43.03, the active
+`libnvidia-eglcore.so` contains two copies of
+`68 0e 01 20 f0 00 00 00`. Both are changed to use DWORD argument `0`, using
+content scanning rather than fixed file offsets. The live P8 test reduced 100
+binds from 45,234,208 to 88,032 GPU ticks and kept the render output correct.
+
+The patch is based on the byte-pattern research in
+[Cyridd/cmpunlocker](https://github.com/Cyridd/cmpunlocker); its source is not
+copied because this repository uses an independent implementation. It is
+version-specific, applies only to a private library copy, and is not evidence
+of an RT-core or general shader unlock.

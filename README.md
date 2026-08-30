@@ -118,6 +118,17 @@ Notes:
 - Real RT execution stays impossible; this unlocks full SM/Tensor speed, the
   16 GiB BAR1, and PCIe Gen2 (see [`docs/CMP50HX.md`](docs/CMP50HX.md)).
 
+## Optional userspace pipeline-bind patch
+
+[`userspace-patch/`](userspace-patch/README.md) makes a private copy of the
+NVIDIA 610.43.03 `libnvidia-eglcore.so` and removes the validated CMP50HX
+Vulkan pipeline-bind delay. It scans and patches exactly two byte-pattern
+matches, never overwrites `/usr/lib`, and includes a native ELF launcher that
+uses the system loader's `--library-path` without setting `LD_LIBRARY_PATH`.
+This is based on the research in [Cyridd/cmpunlocker](https://github.com/Cyridd/cmpunlocker)
+and is separate from the kernel-module unlock. It does not prove an RT-core or
+general shader unlock.
+
 ## Idle power: optional governor
 
 The card idles at **62–64 W** doing nothing, and it never lowers its own

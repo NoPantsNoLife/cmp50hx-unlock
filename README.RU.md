@@ -114,6 +114,17 @@ sudo /opt/cmp50hx-unlock/cmp90hx/verify.sh    # PASS_CMP90HX_ALL_LIVE
   скорость SM/Tensor, BAR1 размером 16 ГиБ и PCIe Gen2 (см.
   [`docs/CMP50HX.md`](docs/CMP50HX.md)).
 
+## Необязательный userspace-патч pipeline bind
+
+Каталог [`userspace-patch/`](userspace-patch/README.md) создаёт отдельную
+копию `libnvidia-eglcore.so` NVIDIA 610.43.03 и убирает проверенную задержку
+Vulkan pipeline bind на CMP50HX. Инструмент ищет ровно два совпадения байтового
+шаблона, не изменяет `/usr/lib` и содержит launcher для native ELF, который
+использует `--library-path` системного загрузчика без `LD_LIBRARY_PATH`.
+Решение основано на исследовании [Cyridd/cmpunlocker](https://github.com/Cyridd/cmpunlocker)
+и не заменяет патчи модуля ядра. RT-core и общий unlock шейдеров этим не
+доказаны.
+
 ## Потребление в простое: необязательный регулятор
 
 В простое карта потребляет **62–64 Вт** и никогда сама не понижает запрос
