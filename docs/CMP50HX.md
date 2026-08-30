@@ -6,11 +6,16 @@ also proved that the zero count is an API exposure gate. A read-only live SM
 trace proves that the first ray-query machine-code group raises warp error 9,
 `INVALID_OPCODE`, at decode, before FECS stalls and reports Xid 109; the
 faulting address latches deterministically at `0x738`/`0x73c` and repeats across
-reboot. As of 2026-08-12, real RT execution is assessed as not achievable by any
-software or firmware change: the gate is a physical RT floorsweep fuse the SM
-samples at reset, below every writable register reached by the driver, GSP-RM,
-the signed Booter, the netlist, and the FECS feature override. See the
-feasibility assessment below. The compute path is unaffected.
+reboot. As of 2026-08-30, real RT execution is assessed as not achievable by
+any software or firmware path found in this project. The five exact user-space
+DSOs contain a full positive RT compiler path but no proved CMP reject branch;
+forcing the alternate GPUCOMP backend changes no saved pipeline-cache or
+metadata byte. The best
+remaining explanation is a physical RT floorsweep fuse or reset-latched decoder
+state below every writable path reached by the driver, GSP-RM, signed Booter,
+netlist, FECS override, and user-space compiler. This remains an inference, not
+direct electrical proof. See the feasibility assessment below. The compute
+path is unaffected.
 On 2026-08-13, a board-gated NVIDIA kernel-module change also made the CMP
 BAR1 aperture 16 GiB. The state survived a cold boot and passed the compute,
 Tensor, and OpenCL checks below.
@@ -24,18 +29,7 @@ a compute or VRAM-bandwidth regression.
 The target is PCI ID `10de:1e09`, a Turing `TU102` CMP 50HX with 56 SMs and
 3584 CUDA cores. It is not an RTX 2080 die: RTX 2080 uses TU104. The useful
 target is normal RTX-class Turing behavior from the enabled TU102 units, with
-the stock 10 GB or 20 GB memory layout left unchanged. The 20 GB install and
-validation record is in [`docs/20GB.md`](20GB.md).
-
-### Dynamic WPR2 support for 20 GB cards
-
-The original stockflow patch compared WPR2 against the 10 GB constants
-`0x027fe000`/`0x027fee00`. A validated 20 GB board instead reports
-`WPR high:low = 0x04ffee00:0x04ffe000`, with the same `0xe00` span. The updated
-patch captures the range produced by stock FWSEC separately for every PCI BDF,
-accepts only that span, and stores both bounds for all later retry, handoff, and
-GSP-ready checks. It never learns bounds from the temporary WPR-down sentinel
-state and fails closed if the geometry is unexpected.
+the stock 10 GB memory layout left unchanged.
 
 ### End-user all-feature package
 
@@ -106,7 +100,7 @@ This is an R&D project. Each claim uses one of these levels:
 An address found in firmware is not, by itself, proof that a host write is safe
 or that the write changes performance.
 
-## Feasibility assessment for real RT execution, 2026-08-13
+## Feasibility assessment for real RT execution, updated 2026-08-30
 
 This section states the current answer to the project's RT-execution goal and
 grades the evidence. Short form: **no software-reachable state has been found
@@ -169,6 +163,21 @@ a physical RT floorsweep fuse sampled by the SM at reset.
    Neither image contains a raw reference to RT fuse `0x21168` or the three RT
    netlist words. No RTX-only VBIOS GR init write exists in the decoded path.
    Full evidence is in `experiments/cmp50-vbios-comparison`.
+10. The five exact NVIDIA user-space compiler and graphics DSOs were mapped in
+    saved IDBs. GPUCOMP also contains a generic `sm_75` profile table/mapper
+    and target register-layout switch, but those use target kinds and feature
+    words rather than CMP or fuse policy. No supported CMP, PCI-ID,
+    product-name, mining-card, or RT-fuse reject branch was found in the mapped
+    host RT path. The last narrow
+    compiler candidate was tested: RTCORE mode changed from automatic `-1` to
+    forced external GPUCOMP `1`, but two runs per mode produced byte-identical
+    10,099-byte caches and identical compiler metadata. No command buffer or
+    GPU work was submitted. Full evidence is in
+    [`CMP50HX-SHARED-OBJECT-AUDIT.md`](CMP50HX-SHARED-OBJECT-AUDIT.md).
+    The GPUCOMP finalizer itself has generic `unsupported instruction`, `SASS
+    generation failed`, and `unsupported SM version` errors, but its visible
+    off-target success path copies the ELF and retags only its machine field;
+    it is not proved to translate SASS or unlock RT execution.
 
 ### What remains untested, and why the prior is low
 
@@ -190,13 +199,15 @@ For a software and firmware unlock, which is the scope of this project, real RT
 execution on CMP 50HX is assessed as **not achievable**: the gate is a
 hardware decode property fixed by a physical fuse the SM samples at reset, below
 every writable register reached by the driver, GSP-RM, the signed Booter, the
-netlist, and the FECS feature override. The positive goal, 56 reporting RT cores
-with a working ray pipeline, stops at API exposure. The only ways past it that
-remain are outside software: a real RTX TU102 reference to disprove the fuse
-model, or physical fuse work. Neither is a driver change.
+netlist, FECS feature override, and tested user-space compiler selector. The
+positive goal, 56 reported RT cores with successful RT pipeline construction,
+stops at API exposure and compilation; no RT instruction executes. The only
+ways past it that remain are outside the proved software paths: a real RTX
+TU102 reference to disprove the fuse model, or physical fuse work. Neither is
+a driver change.
 
 This does not weaken the compute result. Full SM speed, 3584 CUDA cores, 448
-Tensor cores, and both tested memory layouts are unaffected and still pass.
+Tensor cores, and the 10 GB layout are unaffected and still pass.
 
 ## Live hardware checkpoint: 2026-08-11
 
@@ -1094,9 +1105,10 @@ A temporary user-space-only compiler copy was tested. A live uprobe during
 pipeline creation showed that the first consumer ran once and the second did
 not run. At the first consumer, `r10=0`, `dl=0`, `cl=0`, and `r9=0`; the zero
 `dl` guard makes the stock code skip the workaround even when the option byte
-is forced to one. Forcing the option and both option branches still produced
-byte-identical SM75 code. A stronger compile-only test jumped directly to that
-consumer's own workaround flag rewrite; the extracted 256-byte text section
+is forced to one. Forcing the option and both option branches still produced a
+byte-identical extracted compiler-text block. A stronger compile-only test
+jumped directly to that consumer's own workaround flag rewrite; the extracted
+256-byte text section
 still had SHA-256
 `fbcc1bcf52eb4ee03b7ddb44e4bfa98ae2a21677199fd33d18906f336d7e7c52`,
 identical to stock.
@@ -1965,9 +1977,8 @@ wrappers check the patched hashes. System files stay unchanged.
 ## Next realistic unlock candidates
 
 Exact RTX 2080 Ti equivalence is not possible by software alone: this card
-reports `56` SMs / `3584` CUDA cores / `448` Tensor cores and has a board-fixed
-10 GB or 20 GB memory layout, while the missing SMs and memory are physical
-configuration.
+reports `56` SMs / `3584` CUDA cores / `448` Tensor cores and has a 10 GB
+memory layout, while the missing SMs and memory are physical configuration.
 The useful candidates are therefore:
 
 1. **Real RT execution — highest value and the main target.** The host count
@@ -2290,37 +2301,13 @@ Build, one-shot test, recovery, and Shell command instructions are in
 package. The first read-only F54 image and its extraction proof are in
 `artifacts/cmp50-uefi-f54-20260819/`.
 
-## Userspace Vulkan pipeline-bind path
-
-The optional [`userspace-patch/`](../userspace-patch/README.md) is a separate
-userspace experiment. On the tested CMP50HX with NVIDIA 610.43.03, the active
-`/usr/lib/x86_64-linux-gnu/libnvidia-eglcore.so.610.43.03` has SHA-256
-`35517c07dc35c1d966f7c8102deca9cd1f4925f689f95b9ffacbfada3ef6e8f8` and
-contains two copies of
-`68 0e 01 20 f0 00 00 00`. Both are changed to use DWORD argument `0`, using
-content scanning rather than fixed file offsets. The matching file offsets are
-`0xad5f6c` and `0xc65010`.
-
-The first live P8 comparison reduced 100 binds from 45,234,208 to 88,032 GPU
-ticks. The final packaged-script check repeated at 88,096 ticks with
-`LD_LIBRARY_PATH` unset. Its render matched the reference byte-for-byte, with
-SHA-256 `8b16870a8f539ac7e43c00dfa4d3255f8699f0211498002480cddc485f870c48`.
-All six Linux tests passed, the system library hash stayed unchanged, and no
-recent NVRM, Xid, AER, or PCIe error was seen. Steam/Proton was not tested.
-
-The patch is based on the byte-pattern research in
-[Cyridd/cmpunlocker](https://github.com/Cyridd/cmpunlocker); its source is not
-copied because this repository uses an independent implementation. It is
-version-specific, applies only to a private library copy, and is not evidence
-of an RT-core or general shader unlock.
-
 ## Eglcore class and RT exposure map
 
-The full 610.43.03 IDA and live-host record is kept in the parent research
-workspace at `experiments/cmp50-eglcore-capability-map`. It records the
-exact target hash, RM control structures, all recovered class-mask table rows,
-the RT-count data flow, Vulkan extension and feature predicates, IDB changes,
-the 2026-08-30 read-only live result, and a cross-check against all earlier RT
+The full 610.43.03 IDA and live-host record is in
+`experiments/cmp50-eglcore-capability-map`. It records the exact target
+hash, RM control structures, all recovered class-mask table rows, the
+RT-count data flow, Vulkan extension and feature predicates, IDB changes, the
+2026-08-30 read-only live result, and a cross-check against all earlier RT
 experiments.
 
 The extension-record layout was then rechecked from the record base rather
@@ -2362,10 +2349,615 @@ first special ray-query SM instruction is still known to raise
 `+0x158` is therefore unsafe, and an added eglcore RT-count patch is
 redundant on the current live setup.
 
-The expanded parent-workspace read-only run at
+The expanded read-only run at
 `experiments/cmp50-eglcore-capability-map/runs/20260830T101217Z-live-read-only`
 also confirms exposure of opacity micromap, both NV/EXT invocation-reorder
 extensions, cluster and partitioned acceleration structures, and their KHR
 dependencies. Linear swept spheres, motion blur, and RT validation remain
 unexposed for their separate class/state conditions. The probe submitted no
 GPU work.
+
+### 2026-08-30 compile-only pipeline-cache audit
+
+A new live experiment at
+`experiments/cmp50-rt-unlock-candidate-audit` joins the GSP fuse map, the
+ten-phase register timeline, and a no-submit Vulkan compiler probe.
+
+The CMP device exposes `VK_KHR_pipeline_executable_properties`. The probe
+created control, initialize-only, and full ray-query compute pipelines with
+capture flags, but did not create or submit a command buffer. All three runs
+returned zero, and each before/after kernel-log delta was empty. The driver
+returned executable statistics but zero internal representations:
+
+| Input | Registers | Reported binary size |
+|---|---:|---:|
+| control | 16 | 256 |
+| initialize-only | 16 | 256 |
+| full ray query | 33 | 6144 |
+
+The core pipeline cache is an NVIDIA `CPKV` container. Its Zstandard frame at
+`+0x64` decompresses to `NVDANVVMNVuc`. The exact NVuc header stores shader
+code size at `+0x4c` and offset at `+0x50`. The extracted initialize-only and
+full ray-query blocks match through byte `0x8f` and first differ at `0x90`.
+CUDA 13.3 `nvdisasm -b SM75` rejects these blocks, so they are NVIDIA compiler
+ucode, not final SASS. They must not be mapped to the live SM fault address.
+
+This closes direct SASS export through pipeline-executable internal
+representations, but opens a safer static path: trace the NVuc boundary from
+the exact `libnvidia-glvkspirv.so.610.43.03` into `eglcore` and the final
+compiler stack. The library was
+copied to `decompil`, its SHA-256 is
+`ebe38ab3d407ce6a71237006d6d2a9fc0420374700d0a0070a00ee828db5e899`, and its
+IDA database is now open. The full candidate matrix, exact code hashes, failed
+decode evidence, safety rules, and artifact paths are in the experiment
+README.
+
+#### `glvkspirv` NVVM-to-NVuc IDA map
+
+The first static compiler cluster is now mapped and saved in
+`decompil/libnvidia-glvkspirv.so.610.43.03.i64`. The exact function at
+`0xa1800` owns the `NVVMIRToUCode`, `GLV Convert NVVM IR To Ucode`, and
+`Container Serialization` phases. Its only code caller is exported wrapper
+`_nv002nvvm` at `0xa2800`. Its supported IDB name and System V contract are:
+
+```text
+compileNvvmIrToNvucContainer_inferred(
+    NvvmCompileContext *pContext,
+    NvvmCompileState *pState,
+    NvvmCompileOutput *pOutput) -> unsigned status 0 or 2
+```
+
+The following host-side serialization class was also recovered and typed:
+
+| Address | IDB name | Role |
+|---:|---|---|
+| `0x6a1730` | `createNvucContainerWriter_inferred` | allocates the `0xa0`-byte writer and a `0x68`-byte auxiliary index |
+| `0x6a10b0` | `NvucContainerWriter_ctor_inferred` | initializes the typed writer layout and vtable |
+| `0x6a4b10` | `NvucContainerWriter_serialize_inferred` | vtable `+0x28`; returns serialized pointer and byte size |
+| `0x6a0b20` | `NvucContainerWriter_dtor_inferred` | vtable `+0x30`; releases owned state |
+| `0x6a0cb0` | `NvucContainerWriter_deletingDtor_inferred` | vtable `+0x38`; destroys and frees the writer |
+| `0x9588c0` | `g_NvucContainerWriterVtable_inferred` | typed vtable |
+
+This proves the host NVVM-to-ucode and NVuc container-writing path. It does
+not by itself prove where final SM75 SASS is emitted, where a ray instruction
+may be rejected, or which hardware state enables RT execution. Full addresses,
+object offsets, string xrefs, artifact hashes, and negative results are in the
+experiment README.
+
+The saved IDA pass also checked the internal guards at `0xa1817`
+(`pContext +0x200 == 3`) and `0xa1872` (`pState +0x115`). They are mode/state
+and output-fill checks, not proved GPU-target or RT-opcode legality branches.
+
+#### `eglcore`, `gpucomp`, and `rtcore` post-NVuc map
+
+The next static pass copied the exact live
+`libnvidia-gpucomp.so.610.43.03` to `decompil`. Its size is `110902328` bytes
+and SHA-256 is
+`4c16539192951d9b37c7db7e276560ad4f0a26d9d6c62e2004f0f563a418a8ec`.
+The remote and local values matched. IDA analysis completed, the supported
+changes were read back, and
+`decompil/libnvidia-gpucomp.so.610.43.03.i64` was saved at `898683228` bytes
+after the state-4 packaging helpers were named and typed in IDA.
+
+The newly proved owner of the post-NVuc table is
+`libnvidia-rtcore.so.610.43.03`. The exact live file was also copied to
+`decompil`; it is `44877472` bytes with SHA-256
+`df846603db891087ff12ae412a1698fdd16094683bf93ec4a139f8d087e82b7d`.
+The remote and local values match. Its saved, annotated IDA database is
+`decompil/libnvidia-rtcore.so.610.43.03.i64`; it is `284192113` bytes after
+writeback. Auto-analysis completed before changes, and affected functions were
+force-recompiled and read back before the database was saved.
+
+The exact dispatch record at `0x24f9a00` names `CreateInstance` and points,
+through thunk `0xbd0910`, to `createVulkanInstance_inferred` at `0xca92a0`.
+Therefore the typed exact `0xb58`-byte object is the internal Vulkan instance,
+not a separate compiler context. Its `VulkanInstance_inferred` compiler tail
+is:
+
+| Offset | Meaning |
+|---:|---|
+| `0xab8` | `NVVMCOMP` interface returned by `gpucomp` |
+| `0xac0` | `GLSPIRVC` interface returned by `gpucomp` |
+| `0xae0` | `pRtcoreExportTable`, returned by `rtcGetExportTable` |
+| `0xae8` | RTCORE setup capacity value; exact object role still open |
+| `0xaf0` | `bRtcoreExportTableReady` |
+| `0xaf8` | `GLVLowerToNVVMIR` |
+| `0xb00` | `GLVCompileNVVMIRToUCode` |
+| `0xb08` | `GLVCompileNVVMBitcodeToUCode` |
+| `0xb10` | `GLVSerializeModule` |
+| `0xb18..0xb40` | remaining named GLV serialization and lifetime exports |
+| `0xb50` | callback from create-info record id `47`, version `1` |
+
+`compileNvvmIrAndInvokeBackend_inferred` at `0xd1f240` is the first proved
+post-NVuc boundary. It calls Vulkan instance `+0xb00`, serializes through
+`+0xb10`, then passes the serialized pointer and size to RTCORE table slot
+`+0x60`. Its caller later invokes the same table at `+0x1c0` on the returned
+opaque handle before packaging the program.
+
+`PipelineCompileContextBase_ctor_inferred` at `0xd1df10` propagates the same
+internal Vulkan instance pointer through pipeline-context field `+0x58`.
+The public pipeline thunk at `0xbd5310` subtracts `0x50`, matching the public
+instance handle returned as allocation `+0x50`. This proves the object identity
+used at the post-NVuc call.
+
+The RTCORE table at context `+0xae0` is not the `NVVMCOMP` pointer at
+`+0xab8`, not its vtable at `gpucomp` `0x6611438`, and not the `OCGASMCL`
+table at `0x683aae0`. The last table has only twelve proved pointers through
+`+0x58`; `+0x60` is null. Therefore `gpucomp` function `0x254b510`, although
+it is its own `NVVMCOMP` slot `+0x60`, must not be patched as if it were the
+live EGL call.
+
+The final address-taking scan resolved the missing writer.
+`loadRtcoreExportTable_inferred` at `0xb82340` opens exact
+`libnvidia-rtcore.so.610.43.03`, requires `rtcGetVersion` result `0x5c`, and
+resolves `rtcGetExportTable`. At `0xb8250e` it passes the address of instance
+field `+0xae0` and UUID bytes
+`2a b7 62 cf 27 30 51 1e 66 15 c8 3a 4f ba 0f 52`. Success writes the RTCORE
+export table, uses setup slots `+0x08` and `+0x2a8`, and marks instance byte
+`+0xaf0` ready. Another proved consumer at `0xbc8471` uses table slot `+0x18`.
+The constructor clear at `0xca91d6` and this nonzero writer complete the
+static source chain for `+0xae0`.
+
+The RTCORE database closes the two live slot gaps. `rtcGetVersion` at
+`0x38ef30` returns ABI version `92`. `rtcGetExportTable` at `0x38ee30` accepts
+only UUID `2ab762cf2730511e6615c83a4fba0f52`; null input returns `1`, UUID
+mismatch returns `3`, and a match returns status `0` with table `0x29c29a0`.
+The table begins with byte size `0x2d0`, so the exact layout is one size field
+and `89` function pointers. The next bytes at `+0x2d0` begin a zero area. IDA
+type `RtcoreExportTableV92_inferred` matches the proved `720`-byte size and
+`90` members.
+
+Live slot `+0x60` is `0x3da750`, a thunk to
+`rtcoreCompileNvucProgramImpl_inferred` at `0x3d8d60`. The EGL caller at
+`0xd1f341` proves ten System V arguments: device, backend descriptor,
+serialized NVuc pointer and size, target array and count, compile options, two
+flags, and the program output pointer. The built-in compiler route is:
+
+```text
+0x3d8d60 rtcoreCompileNvucProgramImpl_inferred
+  -> 0x3ce650 compileRtcoreNvucBackend_inferred
+  -> 0x1745f0 runInternalRtcoreCompiler_inferred
+  -> 0x174570 runRtcoreCompilerStateMachine_inferred
+  -> 0x173f10 advanceRtcoreCompilerState_inferred
+  -> 0x164620 emitRtcoreFinalCubin_inferred
+  -> 0x12d7e0 buildRtcoreFinalCubinContainer_inferred
+```
+
+The state-4 function contains exact `beforePIC.ll`, `afterPIC.ll`,
+`afterPICCleanup.ll`, `rtx`, and `final.cubin` uses. The final container-builder
+call is at `0x16648f`. Raw call and data flow now classify state 4 and
+`0x12d7e0` as IR cleanup plus final cubin serialization, relocation, and
+container packaging. The strings prove the stage role; they do not prove a
+CMP block or the first machine-instruction choice.
+
+The deeper state-4 readback narrows this result. The emitter calls the container
+builder with generated buffers, relocation/context data, and callbacks. Its
+`0x165334` edge reaches `0x226440`, now named
+`rewriteNvConstantSectionWithNumericSuffix_inferred`: it finds `.nv.constant`,
+parses a decimal suffix, updates section metadata, and formats the suffix back.
+The nearby `0x165359` edge is another generic section helper, and `0x1666a8`
+is output/package handling after the `final.cubin` label. These are concrete
+ELF/Mercury metadata and packaging operations, not a fixed RT instruction
+template or a proved SM75 encoder. The exact RTCORE DSO also has no match for
+the four generated SM75 ray-query words or their recorded 64-byte sequence.
+
+The important RT-specific path is earlier, during compiler preparation:
+
+```text
+0x1745f0 runInternalRtcoreCompiler_inferred
+  -> 0x160cc0 compiler-state preparation
+  -> 0x15ea60 linkRtRuntimeAndPrepareCompilerModule_inferred
+  -> 0x3c2860 processRtIntrinsicModules_inferred
+  -> 0x3c23d0 normalizeAndTagRtIntrinsicNames_inferred
+  -> 0x2029d0 buildAndTagRtIntrinsicRegistry_inferred
+     -> 0x201fa0 initRtIntrinsicRegistry_inferred
+        -> 0x1f3410 buildRtIntrinsicDescriptorTable_inferred
+     -> 0x2028b0 tagRtIntrinsicFunctionsWithTypeSet_inferred
+```
+
+The first link function owns exact phase label `afterLinkRuntime.ll`. The table
+builder creates exact `0xe8`-byte `RtIntrinsicDescriptor_inferred` records.
+Supported fields are 32-byte `nameStorage` at `+0x00`, `pTypeBitSet` at
+`+0x20`, and prefix-match byte `bPrefixMatch` at `+0x64`; all other bytes stay
+explicit unknown storage. The size is exact from both the append stride and
+the tag-loop stride at `0x202971`.
+
+The table contains exact trace, intersection, terminate, ignore, TTU,
+ray-query-derived hit-object, and reorder names. A raw audit of the complete
+`0xe4a9`-byte builder found only 19 conditional jumps. Twelve guard temporary
+allocation cleanup and seven control final vector move, sort, and destruction.
+None reads PCI id, product, SM target, fuse, or compiler-policy state. The RT
+descriptors are registered unconditionally on this path.
+
+`nv.rt.ttu.trifetch` at `0x1fbb19` carries type codes `0x25` (`37`) and `0x1e`
+(`30`) and is appended at `0x1fbd67` without a product branch. The
+`with.flags` form at `0x1fbd74` and
+`nv.rt.hitobject.make.from.rayquery.` at `0x1fcdd9` use the same positive
+construction path. At `0x20295b`, the tag pass copies descriptor
+`pTypeBitSet` to matched IR function `+0x70`.
+
+The later classifier at `0x1a6660`, now named
+`isNvRtIntrinsicNodeWithTypeBits36Or37_inferred`, decodes exact prefix
+`nv.rt.` from source `0x29dde20` into runtime storage `0x29dde27`. It requires
+the function `+0x70` set to contain bit `36` or `37`. Raw code has two
+identical bit-36 calls at `0x1a6701` and `0x1a6712`, followed by the bit-37
+call at `0x1a6730`. TTU type code `37` therefore passes this positive check.
+
+This closes the registry as a hidden CMP deny path. A structured immediate
+scan of `isTypeBitSet_inferred` at `0x70e8e0` found exactly `19` functions that
+query type bit `36` and/or `37`. A reverse caller search to depth `10` reached
+the known RTCORE compiler roots for only these four groups:
+
+```text
+0x141ea0 -> 0x146e60 -> 0x16ca50
+0x1a6660 -> 0x1a6750 -> 0x2f1390 -> 0x2f22d0
+           -> 0x30bf60 -> 0x35d7a0 -> 0x16f8f0
+0x4cd090 -> 0x164620 state 4
+0xa78580 -> 0xa81370 -> 0xa86470 -> 0x4b5de0
+           -> 0x13b7b0 -> 0x16ca50
+```
+
+The other `15` direct consumers and every recovered bit-call address are in
+`rtcore-static-map.json`. No caller path to the known roots was found within
+the bound; unresolved indirect dispatch is still possible.
+
+`isIrNodeEligibleForRtcorePass_inferred` at `0x141ea0` decodes exact
+`rtcore.read.const` into `0x29da692` and uses it in a generic IR allowlist.
+`collectRtcoreFunctionReferences_inferred` at `0x4cd090` decodes exact prefix
+`rtcore.` into `0x2a66cb8`, tests bits `36`/`37`, and collects matching
+call-like IR references. `cloneIrCallNodeWhenNeeded_inferred` at `0xa78580`
+returns the original node or allocates a `64`-byte IR replacement tagged with
+value `261`. These are positive IR handling paths, not machine selectors.
+
+The state-3 RT classifier use is now exact:
+
+```text
+0x172bd0 runRtcoreCompilerState3_inferred
+  -> 0x16f8f0 buildRtcoreStubsAndRunSplitAtCallSite_inferred
+  -> 0x35d7a0 runSplitAtCallSitePass_inferred
+  -> 0x30bf60 analyzeSplitAtCallSiteCandidates_inferred
+  -> 0x2f22d0 estimateIrNodeCostForSplitWrapper_inferred
+  -> 0x2f1390 estimateIrNodeCost_inferred
+  -> 0x1a6750
+  -> 0x1a6660 positive nv.rt/type-bit classifier
+```
+
+Exact strings `SFT-Initial.ll`, `SFT-AfterSplitAtCallSite.ll`,
+`SFT-AfterDebugPlaceholders.ll`, `Call Sites`, `restores`, and `allocas`
+support the split-pass role. The large cost function returns finite `double`
+costs or positive infinity for generic IR nodes. The RT match receives a
+finite split cost; it is not rejected by card identity.
+
+The split pass also has a corrected System V ABI. `RDI` is a hidden result
+pointer for exact `24`-byte `SplitAtCallSiteResult_inferred`; the function
+writes three qwords at `+0`, `+8`, and `+0x10` and returns `RDI` in `RAX`.
+`RSI` is the compiler context and `DL` is a mode byte. The only caller supplies
+a trailing `RCX` value, but the callee overwrites it before any read, so its
+meaning remains open and the IDB calls it `unusedTrailingArg`.
+
+None of the four connected type-bit groups reads PCI ID, product kind, SM
+target, fuse, or device-policy state. A new structural pass then moved the
+boundary into state-3 RT intrinsic lowering. It did not use IDA text search.
+From root `0x16ca50`, direct code refs, direct callee data refs, and the proved
+XOR stream (`0xa7`, then subtract `0x3f` per byte) found `150` direct callees.
+`58` of them directly reference cipher data that decodes with prefix `nv.rt.`,
+`rtcore.`, or `nv_rtcore_`. The export records `169` references: `28` have a
+separately proved decoder length and `141` are bounded printable-prefix
+candidates whose last byte or bytes may be outside the real string.
+
+Four RT lowerers are now typed, named, commented, recompiled, read back, and
+saved in the RTCORE IDB:
+
+```text
+0x16ce5d -> 0x1ba620 lowerIntersectionReportIgnoreTerminateIntrinsics_inferred
+0x1bbb3a -> 0x1b6820 lowerReportIntersectionIntrinsics_inferred
+0x16d51e -> 0x1d48d0 lowerTriangleVertexDataIntrinsics_inferred
+0x16d5ef -> 0x1cad30 lowerRayStateReadIntrinsics_inferred
+```
+
+Exact loop bounds prove triangle inputs and helper names
+`nv.rt.read.triangle.vertex.data`, `rtcore.read.triangle.vertex.data`, and
+`nv_rtcore_ttu_triangle_vertex_data`. The ray-state pass covers 16 unique
+world/object origin and direction components plus `ray.tmin`, `ray.tmax`,
+`ray.flags`, and `ray.mask`. The intersection group proves
+`nv.rt.ignore.intersection`, `nv.rt.terminate.ray`, prefix
+`nv.rt.report.intersection.`, and helper `nv_rtcore_dispatch_shading_AH`.
+The report pass builds named IR values for interval checks, committed-hit
+state, ignore/terminate state, any-hit addresses/state IDs, and
+`ray.terminated`.
+
+The wider 58-function set also covers payloads, exceptions, launch values, SBT
+data, instance/primitive/geometry data, transforms, traversables,
+triangle/sphere/LSS vertex data, trace and continuation calls, hit objects,
+reorder work, and RT stacks. This corrects the earlier narrow description of
+state 3: it owns both stub/split work and a large RT IR-lowering family. None
+of the four fully checked lowerers directly calls a device, PCI, fuse, or
+driver query. That is a bounded result; a compiler option can still be filled
+from device policy before the call.
+
+A second structural scan now covers the whole RTCORE `.data` segment instead
+of only direct state-3 callees. It constructs the encoded byte patterns for
+`nv.rt.`, `rtcore.`, and `nv_rtcore_`, scans raw bytes, decodes bounded
+printable candidates, and records IDA xrefs. It found `447` data hits, `9`
+without an xref, and `174` referenced functions. `58` are the known direct
+state-3 functions; `116` are outside that set, and `78` of those contain a
+bounded ray/TTU/trace/dispatch/stack/hit/call/reorder/traversal term. All
+global-map suffixes are marked non-exact until a decoder loop proves their
+length.
+
+The first outside cluster is now proved. Exact loop bounds recover both names
+and underscore aliases:
+
+```text
+nv.rt.ttu.trifetch
+nv_rt_ttu_trifetch
+nv.rt.ttu.trifetch.with.flags
+nv_rt_ttu_trifetch_with_flags
+```
+
+`advanceRtcoreCompilerState_inferred` calls
+`scanTtuTriFetchUsers_inferred`, then `lowerTtuTriFetchIntrinsics_inferred`.
+The latter reaches `rewriteCollectedTtuTriFetchCalls_inferred` and
+`lowerOneTtuTriFetchCall_inferred`. The plain form supplies one operand; the
+with-flags form supplies two more. The lowerer builds internal IR operations
+with IDs `0x1499`, `0x149b`, and `0x149c`. These are not proved final SM75 SASS
+words. No function in this cluster directly queries target profile, CMP, PCI,
+fuse, driver, or RT capability, so this is positive TTU lowering, not a deny
+branch.
+
+The next outside cluster is also positive RT work. Exact decoder bounds prove
+`nv_rtcore_dispatch_shading_CH`, `nv_rtcore_dispatch_shading_AH`, and prefix
+`nv_rtcore_dispatch_shading_`. At `0x3c2e20`, stage values `2` and `3` choose
+CH or AH and feed a found module into the normal RT intrinsic module path.
+`buildInternalRtcoreDispatchModules_inferred` at `0x3c4120` builds internal
+`raygen` and `dispatch` modules. `0x3d05c0` selects this builder or the external
+GPUCOMP builder. No checked direct callee reads CMP identity, PCI ID, or fuse
+state.
+
+The pass also corrected the shared exact-name ABI. `findNameHashIndex_inferred`
+at `0x87fcb0` takes table, data pointer, and length; uses a `33 * hash + byte`
+open-addressed lookup; and returns an index or `0xffffffff`. Wrappers at
+`0x7d86e0` and `0x7d8870` return payload `+0x08`, with the latter also requiring
+payload byte `+0x10` to be clear. This is an IDB contract correction, not an RT
+gate.
+
+The nearest compiler gap is now after these proved RT lowerers: the first
+function that turns an `rtcore.*` or `nv_rtcore_*` result into a
+target-specific RT machine operation, and then the first SM75 selector or
+encoder. State 4 still collects RT references and packages the final cubin.
+
+The four unknown SM75 words from the separate live shader-cache fault were
+searched as four exact 16-byte patterns and as one 64-byte sequence in the
+RTCORE DSO. All five searches returned zero. The two partial byte hits were
+false: `0x7071b8` is an x86 call displacement and `0x27f3890` is an unrelated
+data table. This supports runtime generation, not a fixed embedded SASS
+template. It still does not identify the rejected word because the confirmed
+ESR address `0xdf5ea5bc10` and shader base were not captured in the same run.
+
+`compileRtcoreNvucBackend_inferred` has two compiler routes. The process-wide
+selector at `0x2ad9fd4` is the `current_value +0x54` field of a `0x60`-byte
+integer-option descriptor at `0x2ad9f80`. ELF `.bss` is zero-filled before
+constructors, but `initializeRtcoreCompilerBackendOptionDescriptor_inferred`
+at `0xc0e80` passes `-1` to
+`constructAndRegisterIntOptionDescriptor_inferred` at `0x1242a0`, which writes
+the value indirectly to `default_value +0x50` and `current_value +0x54`.
+A safe exact-library `dlopen` process confirmed runtime value `0xffffffff`
+after constructors. Eleven direct sites read it; there is no direct address
+write because the proved initializer writes through the descriptor pointer.
+Mode `0` always selects the built-in compiler. Mode `1` always selects the
+external interface. Mode `-1` and every other value select it only when the
+per-config field is `1`. The same mode family controls compile, serialization,
+dispatch module building, and helper objects, so changing only one branch
+would be wrong.
+
+The recovered `0x28`-byte registry stores NVVMCOMP at `+0x08` and RTCORECP at
+`+0x10`. `loadGpucompCompilerInterfaces_inferred` at `0x38f2b0` opens exact
+`libnvidia-gpucomp.so.610.43.03`, resolves `nvGetCompilerInterface`, and asks
+for exact `RTCORECP` version `{3,0}`. External compile uses slot `+0x18` and
+cleanup `+0x48`; external text-IR work uses `+0x20` and cleanup `+0x28`. No
+checked selector, loader, or registry path reads a card, PCI ID, product name,
+or RT fuse.
+
+Live slot `+0x1c0` is `rtcoreSerializeProgram_inferred` at `0x40f7c0`. The EGL
+caller at `0xd237eb` proves five System V arguments, although the callee uses
+only the program and output pointers. It returns `1` for a null program or
+when the exact `uint32_t` field at program `+0xd80` equals `5`; otherwise it
+calls `serializeRtcoreProgramState_inferred` at `0x40f510` and returns `0`.
+The meaning of state `5` remains open and was kept neutral in the IDB.
+
+The exact `sm_75`, `compute_75`, `-D__CUDA_ARCH__=750`, and `Turing` uses are
+in `registerNvptxTargetVariants_inferred` at `0xcc17e0`. That same function
+registers newer targets, so this is generic target setup, not a proved CMP50
+allow or deny path.
+
+The target record is no longer opaque. `createNvptxTargetProfile_inferred` at
+`0xcc1350` allocates the exact `136`-byte
+`NvptxTargetProfile_inferred`. It contains kind/LTO/`a`/`f` flags, five name or
+class pointers, three compatibility sets, a linked compute profile, twelve
+still-neutral 32-bit fields at `+0x50..+0x7c`, and a neutral byte at `+0x80`.
+The related parsed-name object is the exact `12`-byte
+`NvptxTargetSpec_inferred`.
+
+SM75 and SM80 have the same kind, LTO, and `a`/`f` flags. They also have the
+same values at `+0x50`, `+0x54`, `+0x58`, `+0x5c`, `+0x60`, `+0x64`, `+0x70`,
+`+0x74`, `+0x78`, and `+0x7c`. Only two neutral fields differ: SM75 stores
+`16/32` at `+0x68/+0x6c`, while SM80 stores `32/64`. Their meaning is not
+proved. The explicit target-variant flags are separate bytes at `+0x04` and
+`+0x05`, and no direct RT consumer of the two differing values was found.
+Therefore they must not be patched merely because they differ.
+
+`lookupNvptxTargetProfileByName_inferred` at `0xcc4020` is the direct profile
+lookup. Its direct callers use the result for exact-name validation,
+canonicalization, suffix checks, conversion to the compute profile, and
+compatibility-set tests. The constructor, registration routine, lookup, and
+these direct consumers do not query PCI ID, product type, fuse state, driver
+state, or RT capability. This closes the generic target-profile record as a
+proved CMP50 RT-disable branch. It does not close a later instruction selector
+behind an unresolved indirect compiler edge.
+
+A bounded immediate, byte-pattern, and structured-string
+pass found no CMP50 id `0x1e09`, CMP90 id `0x220d`, NVIDIA vendor/device tuple,
+CMP product name, mining-card discriminator, or direct CMP branch in the
+mapped compile and serialization paths. This does not rule out opaque config,
+serialized input, the optional compiler interface, another export slot,
+kernel/GSP policy, or fuse behavior.
+
+The separate `NVVMCOMP` path is still mapped. It validates the serialized
+container, accepts the proved magics `de c0 17 0b` and `42 43 c0 de`, parses
+NVuc, and creates an opaque GPU-program object through:
+
+```text
+0x254b510 nvvmCompileNvucDefaultMode_inferred
+  -> 0x254b420 nvvmCompileNvucWithMode_inferred
+  -> 0x254aef0 validateNvucCompileArgs_inferred
+  -> 0x254ac60 compileNvucContainerToProgram_inferred
+  -> 0x254c4d0 createGpuProgramFromNvuc_inferred
+```
+
+No CMP PCI id, TU102 product-name test, or RT-disable branch was proved in
+that bounded chain.
+
+`gpucomp` also exposes interface id `RTCORECP` with version `{3,0}`. Its object
+is at `0x69c8d28` and points to table `0x65ee360`. The old 20-slot type was
+short: 23 non-null pointers occupy `+0x00..+0xb0`, for a proved `0xb8`-byte
+span. `+0xb8` and `+0xc0` are zero; `+0xc8` is unrelated data. RTCORE proves
+`+0x18` is external compile, `+0x20` is text-IR parse/serialization, `+0x28`
+cleans that result, and `+0x48` cleans the compile result.
+
+Slot `+0x18`, now named `rtcoreCompileWithInterfaceV3_inferred` at `0x61d870`,
+reaches a real second compiler state machine:
+
+```text
+0x61d870 rtcoreCompileWithInterfaceV3_inferred
+  -> 0x6cc050 runGpucompRtcoreCompilePipeline_inferred
+  -> 0x6b7c80 initializeGpucompRtcoreCompileState_inferred
+  -> 0x6cbfe0 runGpucompRtcoreCompileStateMachine_inferred
+  -> 0x6cba10 runGpucompRtcoreCompileStateStep_inferred
+```
+
+The typed common state header is `0x20` bytes: two neutral pointer fields,
+compiler-context pointer `+0x10`, state `+0x18`, and status `+0x1c`. Its loop
+ends at state `5` or non-zero status; cancellation is status `13`. State `2`
+walks entry functions, and `runGpucompRtcoreCompileState4_inferred` at
+`0x6bcba0` owns exact strings `beforePIC.ll`, `afterPIC.ll`,
+`afterPICCleanup.ll`, `final.cubin`, and `rtx`.
+
+The GPUCOMP IDB now also names the state destructor, state 1 and 3 handlers,
+text-IR result cleanup, compile-result cleanup, and helper-object cleanup. The
+13 changed functions have checked prototypes and comments; five useful locals
+and the cancellation callback type were read back. This proves that the
+external route is not a stub. The later live test proved that forcing it gives
+the same saved cache and metadata as automatic mode for the tested shader.
+
+The process-local test needs no `LD_LIBRARY_PATH`. The strict build- and
+hash-locked `LD_PRELOAD` interposer passes mock checks for no opt-in, exact
+`-1 -> 1`, old-value refusal, wrong inode, wrong GNU build ID, and shell
+syntax. Its exact RTCORE load-only run changed the constructor-set value
+`4294967295` (`-1`) to `1`, read it back, returned `0`, and added no kernel-log
+line. It called no NVIDIA export and created no Vulkan or GPU object.
+
+The same ray-query pipeline was then compiled twice in automatic mode and
+twice with forced external mode. All four runs returned `0`, created no command
+buffer, and submitted no GPU work. Every 10,099-byte `pipeline-cache.bin` was
+byte-identical with SHA-256
+`45a6fcc782126503e040925451b6bcdce71a7f44189e3aa3a67b63e2e62dcfb7`.
+Every `pipeline-info.json` was also byte-identical with SHA-256
+`6ba6371070fa765c540270520824dcee1c89d978d0ff7bf70e342a91a4e0111c`.
+Register count stayed 33 and binary size stayed 6,144 bytes. All stderr and
+kernel-delta files were empty.
+
+This closes the cache-based RTCORE backend comparison and gives no new unlock
+evidence. It does not prove final SM75 SASS is equal because the cache contains
+NVuc, not raw SASS. A direct trace of GPUCOMP `0x61d870` can settle which route
+automatic mode uses; an exact final-SASS capture is needed to compare the later
+code boundary. The full record and stop rules are in
+`RESEARCH_LOG.md` and
+`backend-selector-preload/BACKEND_COMPARISON_RESULT.md` under the experiment.
+
+The complete five-library record and present negative RT conclusion are in
+[`CMP50HX-SHARED-OBJECT-AUDIT.md`](CMP50HX-SHARED-OBJECT-AUDIT.md).
+
+#### GPUCOMP finalizer result
+
+The external state machine reaches the ELF/Mercury finalizer core at `0x2563fd0`
+(`runGpucompElfFinalizerCore_inferred`) through wrappers `0x2555e60` and
+`0x2556320`. Its architecture helper at `0x2558350` checks generic source and
+target capability bits. The visible off-target fastpath at `0x2564bf2` copies
+the input ELF and changes only its machine field. It is a retag/copy path, not
+an instruction translator.
+
+The finalizer can report generic `unsupported instruction` (14), `SASS
+generation failed` (16), and `unsupported SM version` (22) through
+`0x479d520`. The `.nv.merc*` parser at `0x479d850` only builds ELF section,
+symbol, and relocation metadata. The `CAN_FINALIZE_DEBUG` helper is called
+with its return value discarded in this build. No bounded finalizer path reads
+PCI ID, product name, mining state, RT fuse, or CMP identity. Therefore this
+new compiler lead strengthens the negative conclusion: the DSO has a real
+generic finalizer and error surface, but no proved CMP50HX switch and no
+proved path that emits legal SM75 RT code from an off-target ELF.
+
+The deeper finalizer constructor at `0x255ed80` is now named
+`initGpucompFinalizerHashMaps_inferred`. It builds two generic four-byte-key
+FNV-1a hash maps with `284` and `295` entries (`579` total); helpers at
+`0x255ead0` and `0x255ed50` only insert entries and return value slots. The
+constructor has no CMP, PCI, product, mining, fuse, target-SM, or RT-legality
+branch, and the table has not been proved to contain SASS opcodes. It remains
+a registry/codec candidate for future consumer tracing, not a patch target.
+
+The software RT-unlock investigation is closed on 2026-08-30. No further
+`.so` patching or RT dispatch testing is justified without new external
+evidence (final-SASS comparison, another card, or direct fuse/decoder data).
+
+Most important, the compiler use of exact annotation `nvvm.rtcore.entry` is a
+positive route. At `0x266c2c4` it is tested, and a match reaches `0x266d708`,
+which allocates an RT-specific object, installs table `0x6613f10`, writes tag
+`0x6101`, and appends it to the compiler work vector. It is not a reject path.
+The string `Target Ray Tracing features` is compiler option metadata only.
+
+This pass found no supported `gpucomp` or mapped RTCORE branch that disables RT
+for CMP50HX. The mapped RTCORE registry is a positive route and must not be
+patched out. Forcing the alternate compiler route also changed no saved byte.
+The live `INVALID_OPCODE` can still come from a later final machine-code choice,
+upload or relocation, hardware decode, or fuse state. This is a priority order,
+not proof of one cause. The detailed evidence, all `89` RTCORE
+function-pointer addresses, UUIDs, ABIs, IDB changes, bounded negative results,
+open indirect edges, and next trace steps are in
+`experiments/cmp50-rt-unlock-candidate-audit/README.md`,
+`experiments/cmp50-rt-unlock-candidate-audit/RESEARCH_LOG.md`,
+`gpucomp-static-map.json`, `rtcore-static-map.json`, and
+`state3-rt-prefixed-datarefs.json`. The whole-`.data` discovery map is
+`global-rt-prefixed-datarefs.json`. Its exporters are
+`tools/export_rtcore_state3_map_ida.py` and
+`tools/export_rtcore_global_rt_map_ida.py`; both use structural xrefs and byte
+patterns only.
+
+#### Exact MME writers and the separate BVH path
+
+The completed `eglcore` and `glcore` IDA passes are now separated from the RT
+decode theory.
+
+In exact `libnvidia-eglcore.so.610.43.03`, only `0xad5f6a` and `0xc6500e`
+emit `NVC597_CALL_MME_MACRO(52)` (`0x20010e68`) with argument `0xf0`.
+`0xc6500e`, reached from `update_pipeline_state_and_emit_mme` at `0xc67040`,
+is the proved live Vulkan bind throttle. `0xad5f6a` is capability-gated and
+was not reached by that probe. No second MME slot, `WAIT_FOR_IDLE`,
+`PIPE_NOP`, or supported hidden-throttle candidate was found. The other
+inspected `0x2001xxxx` writes are ordinary push-buffer state setup.
+
+In exact `libnvidia-glcore.so.610.43.03`, the same pair appears only at
+instruction starts `0xb2085b` and `0xdcbb6e`. Patching both arguments in
+earlier live A/B runs did not change TU102 bind behavior. The active graphics
+path also builds typed 24-byte command descriptors and queues their method
+words dynamically, so the two literal pairs do not describe the whole path.
+
+Most important, `process_bvh_command_stream` at `0xe8b640` is a separate
+function-table path with a structural `bvhdump-*.bin` xref. It queues dynamic
+descriptors and resets/initializes pipeline method state. This is a real BVH
+lead, but no current evidence ties it to the known MME pair, the live CMP bind
+path, or a PCI-ID check. The cluster uses feature/class masks and state bytes;
+no direct `1e09` or RTX `1f0b` compare was proved.
+
+Both IDBs contain the supported names, parameters, comments, and recovered
+descriptor type; changed functions were force-recompiled, read back, and
+saved. Exact addresses, rejected method writes, hashes, function names, and
+open gaps are recorded in the candidate-audit README.

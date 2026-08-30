@@ -116,7 +116,10 @@ Notes:
 - The build downloads the NVIDIA source archive and the `.run` package into
   `/opt/cmp50hx-unlock/cache`; re-runs reuse them.
 - Real RT execution stays impossible; this unlocks full SM/Tensor speed, the
-  16 GiB BAR1, and PCIe Gen2 (see [`docs/CMP50HX.md`](docs/CMP50HX.md)).
+  16 GiB BAR1, and PCIe Gen2 (see [`docs/CMP50HX.md`](docs/CMP50HX.md)). The
+  five-library user-space audit and the negative forced-compiler comparison are
+  in
+  [`docs/CMP50HX-SHARED-OBJECT-AUDIT.md`](docs/CMP50HX-SHARED-OBJECT-AUDIT.md).
 
 ## Optional userspace pipeline-bind patch
 
