@@ -177,6 +177,7 @@ if [[ "${card}" == cmp50hx ]]; then
         "${source_dir}/src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c"
     grep -q 'CMP50_GEN2: RETRAIN_PASS' \
         "${source_dir}/kernel-open/nvidia/nv.c"
+    grep -q 'CMP50_PCIE_DIAG_V1' "${source_dir}/kernel-open/nvidia/nv.c"
     if grep -Eq '0x0008E1B[48C]U|0x008205(7C|80|20)U' "${patch_files[@]}"; then
         printf 'the patch contains a GA100-only PCIe register\n' >&2
         exit 13
@@ -200,6 +201,7 @@ if [[ "${card}" == cmp50hx ]]; then
     grep -a -q 'CMP50_STOCKFLOW_' "${artifact_dir}/nvidia.ko"
     grep -a -q 'CMP50_GSP_READY_' "${artifact_dir}/nvidia.ko"
     grep -a -q 'CMP50_REBAR' "${artifact_dir}/nvidia.ko"
+    grep -a -q 'CMP50_PCIE_DIAG_V1' "${artifact_dir}/nvidia.ko"
     grep -q 'NV2080_CTRL_GR_INFO_INDEX_RT_CORE_COUNT' "${source_dir}/src/nvidia/src/kernel/gpu/gr/kernel_graphics.c"
     grep -q 'data = 56U' "${source_dir}/src/nvidia/src/kernel/gpu/gr/kernel_graphics.c"
 

@@ -556,14 +556,18 @@ bridge to retrain, and waits for an active 5.0 GT/s link.
    - PL link rate `0x8C1C0`, speed field `0x00040000`.
 
    If the GSP half did not pass, the host half skips the retrain.
-4. It writes LTSSM `6` at BAR0 `0x8872C`, reads it back, and waits 50 ms.
-5. It sets `PCI_EXP_LNKCTL2_TLS_5_0GT` on both the GPU and the bridge, sets
+4. After GSP/RM starts, it records the BAR0/XVE mirrors and the endpoint and
+   upstream PCIe capabilities before and after each important phase under
+   `CMP50_PCIE_DIAG_V1`.
+5. It writes LTSSM `6` at BAR0 `0x8872C`, reads it back, and waits 50 ms.
+6. It sets `PCI_EXP_LNKCTL2_TLS_5_0GT` on both the GPU and the bridge, sets
    `PCI_EXP_LNKCTL_RL` on the bridge, and polls the GPU link status up to 20
    times at 100 ms intervals.
-6. Success requires the active link status class to be at least
-   `PCI_EXP_LNKSTA_CLS_5_0GB`; the driver logs `CMP50_GEN2: RETRAIN_PASS`.
-   Capability errors and timeouts log a failure and stop without pretending
-   that the link changed.
+7. Success requires the active link status class to be at least
+   `PCI_EXP_LNKSTA_CLS_5_0GB`; the driver logs `RETRAIN_PASS mode=normal`.
+
+The tested CMP50HX path does not use a Link Disable cycle. See
+`docs/CMP50HX-PCIE-LINK-DISABLE-AUDIT.md` for the live negative result.
 
 ### IDA proof and live result
 
